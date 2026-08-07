@@ -104,6 +104,8 @@ A aplicação não deve bloquear o cadastro de um preparo apenas porque o upload
 
 ## 7. Segurança
 
+A especificação normativa de autenticação, bootstrap, convites e fechamento do app está em [`AUTH_SECURITY.md`](./AUTH_SECURITY.md).
+
 ### 7.1 Unidade de autorização
 
 O **par** é a unidade de segurança.
@@ -129,6 +131,7 @@ O frontend nunca é considerado autoridade para autorização. Mesmo que alguém
 ### 7.3 Segredos
 
 - `service_role` e demais segredos administrativos nunca entram no bundle da PWA.
+- O segredo de bootstrap nunca entra no bundle da PWA nem no armazenamento local do cliente.
 - Operações administrativas ficam em ambiente servidor/Edge Function.
 - Chaves públicas próprias do cliente são tratadas como públicas e protegidas por RLS, não por obscuridade.
 
@@ -139,25 +142,27 @@ O frontend nunca é considerado autoridade para autorização. Mesmo que alguém
 - URLs públicas permanentes para conteúdo pessoal não são o padrão;
 - upload e leitura devem respeitar autorização equivalente à dos registros do banco.
 
-## 8. Convite do segundo membro
+## 8. Formação fechada do par
 
-O produto possui um par com limite rígido de dois membros.
+Não existe cadastro público.
 
 O fluxo aprovado é:
 
-1. primeiro usuário cria o par;
-2. o backend emite convite de uso único;
-3. segundo usuário autenticado aceita o convite;
-4. associação é criada atomicamente;
-5. convite é consumido;
-6. o par passa a recusar novas adesões.
+1. enquanto o sistema ainda não foi inicializado, um **bootstrap único protegido por segredo servidor** cria a primeira conta/membro e o `pair`;
+2. o bootstrap é marcado como consumido e passa a ser rejeitado permanentemente;
+3. o primeiro membro pode gerar um convite de uso único e com expiração para a segunda pessoa;
+4. a segunda conta é criada/associada somente por meio desse convite válido;
+5. a associação é criada atomicamente;
+6. o convite é consumido;
+7. ao atingir dois membros, o `pair` passa ao estado fechado e novas adesões são rejeitadas pelo backend.
 
-A aceitação deve ser validada no backend, nunca apenas no cliente.
+O fechamento é uma invariante de backend. Esconder tela, rota ou botão não é considerado controle de segurança.
 
 ## 9. Edge Functions previstas
 
 Operações candidatas a funções privilegiadas:
 
+- consumo do bootstrap inicial;
 - criação/aceitação de convite;
 - importação de receita por URL;
 - geração e restauração de backup;
@@ -232,6 +237,8 @@ O aplicativo não deve transformar conectividade em um banner permanente ou intr
 
 ## 14. Restrições arquiteturais
 
+- Sem cadastro público.
+- Sem segredo de bootstrap no frontend.
 - Sem backend de autorização implementado apenas no frontend.
 - Sem banco remoto como dependência para toda renderização.
 - Sem sincronização própria improvisada quando PowerSync cobrir o caso com confiabilidade.
