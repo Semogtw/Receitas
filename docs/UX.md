@@ -130,10 +130,21 @@ Modo específico para consulta enquanto a receita está sendo preparada.
 - foco em uma etapa ou pequeno conjunto de etapas;
 - ingredientes acessíveis rapidamente;
 - botões grandes para anterior/próxima;
-- timers quando a etapa possuir duração;
+- timer iniciado diretamente de etapas que possuam duração;
 - tentativa de manter a tela acordada usando APIs disponíveis da plataforma, com fallback quando não suportado;
 - progresso não deve editar o conteúdo canônico da receita;
 - saída e retomada devem preservar posição local.
+
+### Timers simultâneos
+
+- deve ser possível manter **mais de um timer ativo ao mesmo tempo**;
+- timers ativos precisam ficar acessíveis sem obrigar o usuário a voltar para a etapa que os criou;
+- quando houver múltiplos timers, cada um deve identificar de forma curta a etapa/receita correspondente;
+- ações esperadas: pausar, retomar, cancelar e ajustar;
+- o término deve ser perceptível por som e, quando suportado, notificação do sistema;
+- um indicador discreto de timers ativos pode permanecer visível durante o modo cozinha sem roubar o foco do passo atual;
+- a interface não deve simular garantia de background: se o navegador/iOS puder suspender o PWA e comprometer o aviso, isso deve ser comunicado de maneira direta e contextual;
+- ao recuperar o app, timers persistidos devem recalcular o tempo restante/expirado com base em timestamps, evitando depender apenas de contagem contínua em memória.
 
 ## 10. Fotos
 
