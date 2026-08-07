@@ -28,12 +28,13 @@ Este projeto **não** é uma plataforma multiusuário, não possui grupos públi
 - [`docs/TOOLS_AND_PLUGINS.md`](docs/TOOLS_AND_PLUGINS.md) — política de uso de **@Build Web Apps, @Context7, @Supericons, Superpowers, Codex Security, GitHub, Supabase e demais plugins/connectors** conforme a responsabilidade de cada tarefa.
 - [`docs/SYNC.md`](docs/SYNC.md) — política normativa de sincronização e conflitos.
 - [`docs/AUTH_SECURITY.md`](docs/AUTH_SECURITY.md) — autenticação, bootstrap, convites e fechamento do app.
-- [`docs/ACCOUNT_LIFECYCLE.md`](docs/ACCOUNT_LIFECYCLE.md) — logout, remoção excepcional de identidade, preservação do histórico e eventual substituição administrativa sem reabrir o par.
+- [`docs/ACCOUNT_LIFECYCLE.md`](docs/ACCOUNT_LIFECYCLE.md) — logout, isolamento local, remoção excepcional de identidade e eventual substituição administrativa sem reabrir o par.
 - [`docs/IMPORTING.md`](docs/IMPORTING.md) — importação de receitas por URL e texto.
 - [`docs/BACKUP_RESTORE.md`](docs/BACKUP_RESTORE.md) — exportação, validação e modos de restauração.
 - [`docs/MEDIA_STORAGE.md`](docs/MEDIA_STORAGE.md) — mídia local-first, cache e disponibilidade offline.
 - [`docs/COOKING_MODE.md`](docs/COOKING_MODE.md) — ciclo de vida do modo cozinha e preparos em andamento.
 - [`docs/SHOPPING_LISTS.md`](docs/SHOPPING_LISTS.md) — múltiplas listas de compras nomeadas, lista padrão e geração de itens.
+- [`docs/SEARCH_FILTERS.md`](docs/SEARCH_FILTERS.md) — busca local-first, filtros combináveis e ordenação de receitas.
 - [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md) — regras de continuidade do desenvolvimento, incluindo quando as ferramentas acima devem entrar no fluxo e a decisão explícita de **não usar ImageGen no fluxo visual sem nova autorização do usuário**.
 
 A documentação é atualizada conforme as decisões de produto são aprovadas, para evitar depender apenas do histórico da conversa.
