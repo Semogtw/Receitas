@@ -20,12 +20,11 @@ type AuthContextValue = AuthSessionState & AuthActions
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 async function resolveSession(session: Session | null): Promise<AuthSessionState> {
-  if (!session) {
-    return { ...initialAuthSessionState, status: 'signed_out' }
-  }
+  if (!session) return { ...initialAuthSessionState, status: 'signed_out' }
 
   const user = session.user
   if (!user.email_confirmed_at) {
+    clearCachedAuthScope(user.id)
     return {
       status: 'needs_email_verification',
       userId: user.id,
@@ -67,6 +66,8 @@ async function resolveSession(session: Session | null): Promise<AuthSessionState
         restoredFromLocalScope: true,
       }
     }
+  } else {
+    clearCachedAuthScope(user.id)
   }
 
   return {
@@ -124,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut: async () => {
       const currentUserId = state.userId
       const supabase = getSupabaseClient()
-      const { error } = await supabase.auth.signOut()
+      const { error } = await supabase.auth.signOut({ scope: 'local' })
       if (error) throw error
       if (currentUserId) clearCachedAuthScope(currentUserId)
       setState({ ...initialAuthSessionState, status: 'signed_out' })
