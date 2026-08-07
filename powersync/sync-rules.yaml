@@ -1,0 +1,26 @@
+bucket_definitions:
+  pair_data:
+    parameters:
+      - |
+        SELECT pair_id
+        FROM pair_members
+        WHERE user_id = request.user_id()
+          AND activated_at IS NOT NULL
+          AND removed_at IS NULL
+    data:
+      - SELECT * FROM recipes WHERE pair_id = bucket.pair_id
+      - SELECT * FROM recipe_ingredients WHERE pair_id = bucket.pair_id
+      - SELECT * FROM recipe_steps WHERE pair_id = bucket.pair_id
+      - SELECT * FROM categories WHERE pair_id = bucket.pair_id
+      - SELECT * FROM recipe_categories WHERE pair_id = bucket.pair_id
+      - SELECT * FROM recipe_photos WHERE pair_id = bucket.pair_id
+      - SELECT * FROM cooking_sessions WHERE pair_id = bucket.pair_id
+      - SELECT * FROM cooking_session_ratings WHERE pair_id = bucket.pair_id
+      - SELECT * FROM cooking_session_photos WHERE pair_id = bucket.pair_id
+      - SELECT * FROM ingredient_conversion_profiles WHERE pair_id = bucket.pair_id
+      - SELECT * FROM imports WHERE pair_id = bucket.pair_id
+      - SELECT * FROM meal_periods WHERE pair_id = bucket.pair_id
+      - SELECT * FROM meal_plan_entries WHERE pair_id = bucket.pair_id
+      - SELECT * FROM shopping_lists WHERE pair_id = bucket.pair_id
+      - SELECT * FROM shopping_items WHERE pair_id = bucket.pair_id
+      - SELECT * FROM conflicts WHERE pair_id = bucket.pair_id
