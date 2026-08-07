@@ -12,7 +12,7 @@
 - Exclusões importantes são recuperáveis.
 - Conflitos são entidades explícitas, não apenas logs descartáveis.
 - Fotos da receita e fotos de preparos possuem ciclos de vida distintos.
-- Avaliações de preparos pertencem individualmente a cada membro e não são armazenadas como uma única nota compartilhada.
+- Avaliações e comentários de preparos pertencem individualmente a cada membro; observações compartilhadas pertencem ao preparo.
 
 ## 2. Entidades principais
 
@@ -167,12 +167,12 @@ Campos conceituais:
 - usuário que registrou;
 - data/hora;
 - porções efetivamente preparadas;
-- observações compartilhadas do preparo;
+- `shared_observation`, opcional, para anotação conjunta do preparo;
 - referência de versão;
 - snapshot suficiente para preservar o estado relevante da receita usada naquele preparo;
 - `deleted_at`.
 
-A entidade do preparo **não armazena uma única nota compartilhada**.
+A entidade do preparo **não armazena uma única nota compartilhada**. A observação compartilhada também não substitui os comentários pessoais dos membros.
 
 ### `cooking_session_ratings`
 
@@ -185,7 +185,7 @@ Campos conceituais:
 - `pair_id`;
 - `user_id`;
 - `score`, restrito ao intervalo de 0 a 10 em incrementos de 0,5;
-- comentário individual opcional, caso a implementação decida separar comentários pessoais das observações compartilhadas;
+- `comment`, comentário individual opcional daquele membro;
 - timestamps de criação/edição;
 - metadados de versionamento e sincronização;
 - `deleted_at` quando necessário para restauração/auditoria.
@@ -194,9 +194,10 @@ Invariantes:
 
 - existe no máximo **uma avaliação ativa por (`cooking_session_id`, `user_id`)**;
 - apenas membros do mesmo `pair_id` do preparo podem avaliá-lo;
-- editar a própria avaliação não altera a avaliação do outro membro;
+- editar a própria nota ou comentário não altera a avaliação nem o comentário do outro membro;
 - um preparo pode existir sem avaliações;
 - a ausência de avaliação de um membro não invalida a avaliação do outro;
+- comentário individual e `shared_observation` são campos semanticamente distintos e não devem ser fundidos durante sincronização ou resolução de conflitos;
 - médias são valores derivados e não precisam ser persistidas como fonte de verdade.
 
 Agregados possíveis derivados em leitura:
