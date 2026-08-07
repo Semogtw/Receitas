@@ -63,6 +63,15 @@ O modo de preparo é composto por etapas ordenáveis. Cada etapa pode conter:
 
 A estrutura deve permitir, no futuro e sem remodelagem, recursos como timers por etapa.
 
+### 3.4 Estados organizacionais da receita
+
+- **Já fizemos** não é um marcador manual: é um estado **derivado automaticamente da existência de pelo menos um preparo válido no histórico**.
+- Se uma receita possui histórico de preparo, ela deve ser considerada já feita sem exigir uma flag separada.
+- **Queremos fazer** é um marcador manual e independente do histórico.
+- **Favorito** também é um marcador manual e independente.
+- Uma receita já preparada pode continuar marcada como “Queremos fazer” se o par quiser fazê-la novamente.
+- Evitar persistir estados derivados quando eles puderem ser calculados com segurança, reduzindo a possibilidade de contradições entre receita e histórico.
+
 ## 4. Porções e redimensionamento
 
 - Toda receita pode informar rendimento/porções-base.
