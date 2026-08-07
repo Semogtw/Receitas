@@ -35,7 +35,6 @@ supabase/functions/_shared/auth.ts
 supabase/functions/_shared/http.ts
 supabase/functions/bootstrap/index.ts
 supabase/functions/pair-invite/index.ts
-supabase/functions/account-admin/index.ts
 supabase/tests/identity_rls.sql
 supabase/tests/domain_rls.sql
 src/lib/supabase/client.ts
@@ -66,6 +65,15 @@ export interface AuthSessionState {
   userId: string | null
   pairId: string | null
 }
+
+export interface AuthActions {
+  signIn(email: string, password: string): Promise<void>
+  signOut(): Promise<void>
+  requestPasswordReset(email: string): Promise<void>
+  resendVerification(): Promise<void>
+}
+
+export type AuthContextValue = AuthSessionState & AuthActions
 ```
 
 All shared domain rows either carry `pair_id` directly or are reachable through an unambiguous parent that does.
@@ -433,9 +441,9 @@ git commit -m "feat: add one-time second-member invite"
 - Modify: `src/app/App.tsx`
 
 **Interfaces:**
-- Produces: `useAuth(): AuthSessionState & auth actions`.
+- Produces `useAuth(): AuthContextValue` with exactly the four `AuthActions` declared in the stable contract.
 
-- [ ] **Step 1: Write reducer/state-machine tests**
+- [ ] **Step 1: Write reducer/state-machine and action-contract tests**
 
 Test transitions:
 
@@ -447,7 +455,7 @@ signed_out -> loading (login attempt)
 ready -> signed_out (logout)
 ```
 
-A user with unverified e-mail must never enter `ready`.
+A user with unverified e-mail never enters `ready`. Also test that `useAuth()` exposes `signIn`, `signOut`, `requestPasswordReset` and `resendVerification` with rejected promises converted into sanitized UI errors rather than leaked provider payloads.
 
 - [ ] **Step 2: Implement auth provider using current Supabase APIs**
 
@@ -469,7 +477,7 @@ Recovery: request reset without creating users and use generic response copy whe
 
 - [ ] **Step 5: Test logout local-data handoff contract**
 
-For now emit a `beforeLogout` hook/event that plan 03 will implement to protect unsynced local data. Do not clear local databases directly in this plan.
+For now emit a `beforeLogout` hook/event that plan 03 implements to protect unsynced local data. Do not clear local databases directly in this plan.
 
 - [ ] **Step 6: Run unit/rendered auth QA**
 
