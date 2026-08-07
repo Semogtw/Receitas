@@ -8,6 +8,8 @@ Antes de implementar ou alterar comportamento, consultar os documentos relevante
 
 Para tarefas de frontend, **`docs/FRONTEND.md` é leitura obrigatória junto de `docs/UX.md` e da especificação funcional da feature**.
 
+Para tarefas de desenvolvimento em geral, **`docs/TOOLS_AND_PLUGINS.md` define quando usar @Build Web Apps, @Context7, @Supericons, Superpowers, Codex Security, GitHub, Supabase e demais ferramentas conectadas**.
+
 Em caso de conflito entre uma sugestão de ferramenta/plugin e a especificação do projeto, **a especificação do projeto vence**.
 
 Decisões novas de produto devem ser documentadas antes ou junto da implementação correspondente, em vez de ficarem somente no histórico da conversa.
@@ -118,19 +120,45 @@ Fluxo esperado:
 
 Não usar Context7 apenas para “decorar” uma resposta quando a tarefa não depende de biblioteca atual. Quando usado, suas conclusões devem ser incorporadas ao código/documentação de forma concreta.
 
-## 8. Relação com outras ferramentas e skills
+## 8. Uso de @Supericons
 
-Usar a ferramenta mais adequada para cada responsabilidade:
+**Usar @Supericons sempre que uma tarefa de frontend exigir novos ícones, substituição de ícones ou revisão de coerência do conjunto existente.**
+
+Regras:
+
+- para múltiplos slots, recomendar o conjunto em uma única passagem quando possível;
+- preferir uma família principal consistente;
+- revisar semanticamente as sugestões antes de aceitá-las;
+- visualizar candidatos quando houver dúvida de coerência óptica;
+- obter o SVG exato somente depois de escolher um resultado real retornado pela ferramenta;
+- não misturar bibliotecas casualmente;
+- não usar emoji como solução de iconografia de interface;
+- controles apenas por ícone precisam de nome acessível.
+
+@Supericons é uma ferramenta de descoberta e consistência; a recomendação automática não substitui julgamento de significado e aderência a `docs/UX.md`/`docs/FRONTEND.md`.
+
+## 9. Relação com outras ferramentas e skills
+
+A política completa está em `docs/TOOLS_AND_PLUGINS.md`.
+
+Resumo de responsabilidades:
 
 - **@Build Web Apps:** frontend React, UI, interação, responsividade, QA visual e revisão de performance do frontend;
 - **@Context7:** documentação atual de bibliotecas/frameworks/SDKs e validação de APIs/configurações;
+- **@Supericons:** busca, recomendação, visualização e SVG exato de iconografia consistente;
 - **Superpowers:** processo de design/planejamento, TDD, depuração sistemática, execução e verificação conforme a fase do projeto;
-- **Supabase/Postgres:** modelagem, consultas, RLS, migrações e backend quando essas ferramentas estiverem em uso;
-- demais plugins/skills: somente quando trouxerem capacidade específica relevante.
+- **Codex Security:** scans/revisões de segurança quando houver código e risco que justifiquem auditoria;
+- **GitHub:** fonte de verdade persistente, documentação, histórico e commits;
+- **Supabase:** schema, SQL, RLS, Auth, Storage, Edge Functions e diagnóstico do backend quando a implementação correspondente existir;
+- **Figma/Canva:** opcionais para trabalho visual explicitamente útil, sem reabrir ImageGen por padrão;
+- **Vercel:** somente se for escolhida para uma tarefa concreta de deploy/preview;
+- **OpenAI Developers:** somente se uma integração de IA for explicitamente aprovada;
+- **Plugin Management:** descoberta/gestão de plugins quando faltar capacidade externa relevante;
+- demais plugins/connectors: somente quando a tarefa realmente envolver o sistema correspondente.
 
-Uma ferramenta não deve ser usada para substituir outra que tenha responsabilidade mais apropriada.
+Uma ferramenta não deve ser usada para substituir outra que tenha responsabilidade mais apropriada, nem apenas porque está disponível.
 
-## 9. Material de referência visual
+## 10. Material de referência visual
 
 O material de referência de frontend fornecido ao projeto foi **adaptado**, não adotado literalmente.
 
@@ -143,19 +171,20 @@ Isso significa, entre outras coisas:
 - não usar placeholders externos ou animação excessiva apenas porque constavam do material de referência;
 - preservar a natureza utilitária, mobile-first e culinária do Receitas.
 
-## 10. Documentação e commits
+## 11. Documentação e commits
 
 Manter a documentação sincronizada com as decisões e com a implementação.
 
 Preferir commits pequenos e descritivos em marcos lógicos, especialmente quando uma sessão puder ser interrompida. Não deixar decisões importantes existirem apenas na memória da sessão.
 
-## 11. Checklist curto para uma tarefa de frontend
+## 12. Checklist curto para uma tarefa de frontend
 
 Antes de concluir uma tarefa de frontend, verificar:
 
-- [ ] li `docs/FRONTEND.md`, `docs/UX.md` e a especificação funcional relevante;
+- [ ] li `docs/FRONTEND.md`, `docs/UX.md`, `docs/TOOLS_AND_PLUGINS.md` e a especificação funcional relevante;
 - [ ] usei @Build Web Apps onde trouxe benefício real;
 - [ ] consultei @Context7 se dependi de API/configuração atual de biblioteca;
+- [ ] usei @Supericons se criei, substituí ou revisei iconografia;
 - [ ] respeitei a decisão de não usar ImageGen;
 - [ ] preservei a direção visual aprovada;
 - [ ] evitei estado React redundante e Effects desnecessários quando aplicável;
@@ -163,4 +192,5 @@ Antes de concluir uma tarefa de frontend, verificar:
 - [ ] conferi mobile e desktop quando aplicável;
 - [ ] conferi estados relevantes de loading/erro/offline/sync quando aplicável;
 - [ ] não deixei erro relevante de console conhecido sem explicação;
+- [ ] considerei Codex Security quando a mudança tocou superfície sensível;
 - [ ] atualizei documentação se o comportamento ou a arquitetura mudou.
