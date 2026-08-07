@@ -15,6 +15,7 @@
 - Avaliações e comentários de preparos pertencem individualmente a cada membro; observações compartilhadas pertencem ao preparo.
 - Entidades sincronizáveis usam IDs estáveis e metadados de versão suficientes para detectar concorrência.
 - Auto-merge só é permitido quando a união for inequivocamente segura; ambiguidades viram conflito explícito.
+- Estado operacional de um preparo em andamento no modo cozinha é local e transitório; não é `cooking_session` até a finalização explícita.
 
 A política normativa de sincronização está em [`SYNC.md`](./SYNC.md).
 
@@ -168,7 +169,7 @@ Uploads binários usam fila separada da sincronização dos metadados. Falha de 
 
 ### `cooking_sessions`
 
-Representa uma ocasião em que a receita foi preparada.
+Representa uma ocasião **finalizada e explicitamente registrada** em que a receita foi preparada.
 
 Campos conceituais:
 
@@ -183,6 +184,13 @@ Campos conceituais:
 - snapshot suficiente para preservar o estado relevante da receita usada naquele preparo;
 - metadados de versionamento e sincronização;
 - `deleted_at`.
+
+Invariantes adicionais:
+
+- iniciar modo cozinha não cria esta entidade;
+- abandonar um preparo em andamento não cria esta entidade;
+- somente a ação explícita **“Finalizar preparo”** transforma a execução em histórico persistente;
+- a transição de finalização deve evitar duplicação do mesmo preparo em caso de repetição acidental/retry.
 
 A entidade do preparo **não armazena uma única nota compartilhada**. A observação compartilhada também não substitui os comentários pessoais dos membros.
 
@@ -377,7 +385,7 @@ Regras:
 - cascatas destrutivas devem ser evitadas para conteúdo recuperável;
 - soft delete participa do versionamento e pode conflitar com edição concorrente.
 
-## 13. Estado local de sincronização
+## 13. Estado local de sincronização e preparo
 
 Algumas estruturas pertencem apenas ao cliente/local store e não precisam existir como tabelas públicas do domínio remoto.
 
@@ -387,9 +395,36 @@ Exemplos conceituais:
 - fila de uploads de mídia;
 - cache de arquivos;
 - metadados transitórios de retry;
-- indicadores de conectividade.
+- indicadores de conectividade;
+- estado de preparo em andamento do modo cozinha;
+- timers ativos associados a esse preparo local.
 
-Cada operação pendente deve poder carregar, conforme a implementação:
+### Estado local do modo cozinha
+
+Pode ser representado por estrutura local equivalente a `cooking_mode_sessions`/`active_cooking_session`, sem compromisso com esse nome final.
+
+Esse estado pode conter:
+
+- identificador local estável da execução em andamento;
+- `recipe_id` e contexto de versão necessário para gerar o snapshot histórico ao finalizar;
+- porções/escala em uso;
+- etapa atual;
+- marcações transitórias de ingredientes/passos;
+- timers e respectivos timestamps/deadlines;
+- timestamps de início e última atividade.
+
+Regras:
+
+- não aparece no histórico persistente;
+- não faz a receita ser considerada “Já fizemos”;
+- pode ser retomado enquanto o armazenamento local permanecer disponível;
+- “Encerrar sem registrar” remove/abandona esse estado sem criar `cooking_session`;
+- “Finalizar preparo” cria o `cooking_session` persistente e encerra o estado operacional correspondente;
+- por padrão, esse estado não precisa ser sincronizado entre dispositivos.
+
+A especificação normativa está em [`COOKING_MODE.md`](./COOKING_MODE.md).
+
+Cada operação pendente de sincronização deve poder carregar, conforme a implementação:
 
 - ID estável da operação;
 - entidade alvo;
