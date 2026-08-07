@@ -1,7 +1,11 @@
 import { constantTimeSecretEquals } from '../_shared/crypto.ts'
 import { jsonResponse, preflightResponse, readJsonObject, requestOriginAllowed } from '../_shared/http.ts'
 import { getAdminClient, getAppBaseUrl, getBootstrapSecret } from '../_shared/server.ts'
-import { BootstrapPublicError, runBootstrap } from './service.ts'
+import { BootstrapPublicError, runBootstrap, runBootstrapReinvite } from './service.ts'
+
+function bootstrapSecretMatches(provided: string): Promise<boolean> {
+  return constantTimeSecretEquals(provided, getBootstrapSecret())
+}
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return preflightResponse(request)
@@ -11,31 +15,69 @@ Deno.serve(async (request) => {
   try {
     const body = await readJsonObject(request)
     const admin = getAdminClient()
+    const action = body.action === 'reinvite' ? 'reinvite' : 'start'
 
-    const result = await runBootstrap(body, {
-      appBaseUrl: getAppBaseUrl(),
-      verifySecret: (provided) => constantTimeSecretEquals(provided, getBootstrapSecret()),
-      isAvailable: async () => {
-        const { data, error } = await admin.rpc('bootstrap_is_available')
-        if (error) throw error
-        return data === true
-      },
-      inviteUser: async (email, redirectTo) => {
-        const { data, error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo })
-        if (error || !data.user) throw error ?? new Error('missing_invited_user')
-        return data.user.id
-      },
-      createPair: async (userId) => {
-        const { error } = await admin.rpc('create_bootstrap_pair', { invited_user_id: userId })
-        if (error) throw error
-      },
-      deleteUser: async (userId) => {
-        const { error } = await admin.auth.admin.deleteUser(userId)
-        if (error) throw error
-      },
-    })
+    const result = action === 'reinvite'
+      ? await runBootstrapReinvite(body, {
+        appBaseUrl: getAppBaseUrl(),
+        verifySecret: bootstrapSecretMatches,
+        begin: async (email) => {
+          const { data, error } = await admin.rpc('begin_bootstrap_reinvite', { target_email: email })
+          if (error) throw error
+          const row = Array.isArray(data) ? data[0] : data
+          if (!row?.attempt_id || !row?.old_user_id) throw new Error('missing_reinvite_state')
+          return { attemptId: row.attempt_id as string, oldUserId: row.old_user_id as string }
+        },
+        findAuthUser: async (email) => {
+          const { data, error } = await admin.rpc('find_auth_user_by_email', { target_email: email })
+          if (error) throw error
+          return typeof data === 'string' ? data : null
+        },
+        deleteUser: async (userId) => {
+          const { error } = await admin.auth.admin.deleteUser(userId)
+          if (error) throw error
+        },
+        inviteUser: async (email, redirectTo) => {
+          const { data, error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo })
+          if (error || !data.user) throw error ?? new Error('missing_invited_user')
+          return data.user.id
+        },
+        finish: async (attemptId, newUserId) => {
+          const { error } = await admin.rpc('finish_bootstrap_reinvite', {
+            target_attempt_id: attemptId,
+            new_user_id: newUserId,
+          })
+          if (error) throw error
+        },
+        abort: async (attemptId) => {
+          const { error } = await admin.rpc('abort_bootstrap_reinvite', { target_attempt_id: attemptId })
+          if (error) throw error
+        },
+      })
+      : await runBootstrap(body, {
+        appBaseUrl: getAppBaseUrl(),
+        verifySecret: bootstrapSecretMatches,
+        isAvailable: async () => {
+          const { data, error } = await admin.rpc('bootstrap_is_available')
+          if (error) throw error
+          return data === true
+        },
+        inviteUser: async (email, redirectTo) => {
+          const { data, error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo })
+          if (error || !data.user) throw error ?? new Error('missing_invited_user')
+          return data.user.id
+        },
+        createPair: async (userId) => {
+          const { error } = await admin.rpc('create_bootstrap_pair', { invited_user_id: userId })
+          if (error) throw error
+        },
+        deleteUser: async (userId) => {
+          const { error } = await admin.auth.admin.deleteUser(userId)
+          if (error) throw error
+        },
+      })
 
-    return jsonResponse(request, { ok: true, ...result }, 201)
+    return jsonResponse(request, { ok: true, action, ...result }, action === 'start' ? 201 : 200)
   } catch (error) {
     if (error instanceof BootstrapPublicError) {
       return jsonResponse(request, { error: error.message, code: error.code }, error.status)
