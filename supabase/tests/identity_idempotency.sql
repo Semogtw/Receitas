@@ -51,11 +51,11 @@ select set_config(
 set local role authenticated;
 
 select is(
-  public.accept_pair_invite(repeat('c', 64)),
+  public.accept_pair_invite(),
   current_setting('test.pair_id')::uuid,
   'repeating pair invite acceptance after success is idempotent'
 )
-from (select public.accept_pair_invite(repeat('c', 64)) as first_accept) accepted;
+from (select public.accept_pair_invite() as first_accept) accepted;
 
 reset role;
 select * from finish();
