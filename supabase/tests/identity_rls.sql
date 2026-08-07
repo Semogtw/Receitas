@@ -121,6 +121,21 @@ select throws_ok(
 
 select set_config(
   'request.jwt.claims',
+  json_build_object('sub', '10000000-0000-0000-0000-000000000003', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+
+select throws_ok(
+  $$select public.accept_pair_invite()$$,
+  'P0001',
+  'pair invite not found',
+  'an unrelated verified identity cannot consume the reserved second seat'
+);
+
+reset role;
+select set_config(
+  'request.jwt.claims',
   json_build_object('sub', '10000000-0000-0000-0000-000000000002', 'role', 'authenticated')::text,
   true
 );
@@ -130,20 +145,13 @@ select throws_ok(
   $$select public.activate_current_pair_membership()$$,
   'P0001',
   'pair invite acceptance required',
-  'second member cannot bypass the pair invite token'
-);
-
-select throws_ok(
-  $$select public.accept_pair_invite(repeat('b', 64))$$,
-  'P0001',
-  'invite is invalid or expired',
-  'wrong pair invite token is rejected'
+  'second member cannot bypass reserved invite completion'
 );
 
 select is(
-  public.accept_pair_invite(repeat('a', 64)),
+  public.accept_pair_invite(),
   current_setting('test.pair_id')::uuid,
-  'verified invited identity consumes its own pair invite'
+  'verified invited identity consumes its own reserved pair invite'
 );
 
 select is(
