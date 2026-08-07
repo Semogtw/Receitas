@@ -18,10 +18,23 @@ A interface deve continuar funcional sem conexão. O backend existe para autenti
 - **Autenticação:** Supabase Auth com e-mail e senha.
 - **Mídia:** Supabase Storage em buckets privados.
 - **Operações privilegiadas:** Supabase Edge Functions quando a lógica não deve residir no cliente.
+- **Hospedagem do frontend:** Cloudflare Pages Free.
+- **Sync gerenciado:** PowerSync Cloud Free.
+- **Backend gerenciado:** Supabase Free.
+
+A arquitetura deve permanecer com **custo recorrente obrigatório de US$ 0**. Se um provedor gratuito deixar de atender o projeto, a primeira resposta deve ser reavaliar alternativas gratuitas compatíveis, não introduzir assinatura paga automaticamente.
+
+A política detalhada de deploy, limites e operação está em [`DEPLOYMENT_OPERATIONS.md`](./DEPLOYMENT_OPERATIONS.md).
 
 ### Por que não Expo Web como base
 
 A direção aprovada prioriza uma PWA Web de alta qualidade agora, sem carregar complexidade específica de uma futura distribuição nativa. A camada local-first é tratada como requisito central, não como melhoria posterior.
+
+### Por que Cloudflare Pages para o frontend
+
+O frontend é essencialmente estático e não precisa de runtime serverless próprio do host. Cloudflare Pages Free oferece CDN, builds suficientes para o projeto e requests de assets estáticos gratuitos/ilimitados documentados, mantendo o deploy simples e sem custo.
+
+Vercel Hobby permanece como fallback técnico possível, não como dependência arquitetural.
 
 ## 3. Fonte de leitura da interface
 
@@ -106,7 +119,7 @@ A política de armazenamento local é **seletiva**, não uma duplicação obriga
 
 Nunca remover a única cópia local de um arquivo enquanto o upload remoto ainda não tiver sido confirmado.
 
-A especificação normativa de cache, download sob demanda e disponibilidade offline está em [`MEDIA_OFFLINE.md`](./MEDIA_OFFLINE.md).
+A especificação normativa de cache, download sob demanda e disponibilidade offline está em [`MEDIA_STORAGE.md`](./MEDIA_STORAGE.md).
 
 ## 7. Segurança
 
@@ -140,6 +153,7 @@ O frontend nunca é considerado autoridade para autorização. Mesmo que alguém
 - O segredo de bootstrap nunca entra no bundle da PWA nem no armazenamento local do cliente.
 - Operações administrativas ficam em ambiente servidor/Edge Function.
 - Chaves públicas próprias do cliente são tratadas como públicas e protegidas por RLS, não por obscuridade.
+- variáveis `VITE_*` são tratadas como públicas e nunca armazenam segredo.
 
 ### 7.4 Storage
 
@@ -243,7 +257,36 @@ A experiência deve diferenciar pelo menos:
 
 O aplicativo não deve transformar conectividade em um banner permanente ou intrusivo quando tudo estiver normal.
 
-## 14. Restrições arquiteturais
+## 14. Operação gratuita e hibernação
+
+Supabase Free e PowerSync Cloud Free podem pausar/desativar projetos após aproximadamente uma semana de inatividade, conforme os planos atuais.
+
+Isso é aceito como trade-off do requisito de custo zero porque:
+
+- dados já locais continuam consultáveis;
+- mutações podem permanecer na fila local;
+- uploads sem confirmação permanecem protegidos localmente;
+- os serviços podem ser retomados e a sincronização continuar depois.
+
+Não gerar keep-alive artificial para contornar políticas de gratuidade.
+
+O runbook de operação e retomada deve ser mantido em `DEPLOYMENT_OPERATIONS.md` e refinado no primeiro deploy real.
+
+## 15. Testes
+
+A estratégia técnica de testes está em [`TESTING.md`](./TESTING.md).
+
+Direção:
+
+- Vitest para domínio/unidade/integração;
+- Testing Library para comportamento de componentes;
+- Playwright para E2E, WebKit/mobile e cenários offline;
+- QA renderizado com @Build Web Apps quando disponível;
+- testes de RLS/backend e Codex Security nas superfícies sensíveis.
+
+Build ou typecheck isolados não são suficientes para considerar uma feature concluída.
+
+## 16. Restrições arquiteturais
 
 - Sem cadastro público.
 - Sem segredo de bootstrap no frontend.
@@ -255,3 +298,5 @@ O aplicativo não deve transformar conectividade em um banner permanente ou intr
 - Sem uploads públicos por padrão.
 - Sem depender do cache local como única cópia de mídia sincronizada.
 - Sem arquitetura multi-tenant genérica para vários pares.
+- Sem serviço pago obrigatório.
+- Sem keep-alive artificial apenas para contornar hibernação de plano gratuito.
