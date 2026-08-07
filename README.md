@@ -24,6 +24,7 @@ Este projeto **não** é uma plataforma multiusuário, não possui grupos públi
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — arquitetura local-first, sincronização, segurança e backend.
 - [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) — entidades, relacionamentos e regras de dados.
 - [`docs/UX.md`](docs/UX.md) — direção visual e princípios de experiência.
+- [`docs/FRONTEND.md`](docs/FRONTEND.md) — engenharia e qualidade do frontend: anti-template/anti-“cara de IA”, componentes, React, Vite/PWA, estados, responsividade, acessibilidade, performance e QA.
 - [`docs/SYNC.md`](docs/SYNC.md) — política normativa de sincronização e conflitos.
 - [`docs/AUTH_SECURITY.md`](docs/AUTH_SECURITY.md) — autenticação, bootstrap, convites e fechamento do app.
 - [`docs/IMPORTING.md`](docs/IMPORTING.md) — importação de receitas por URL e texto.
@@ -31,8 +32,8 @@ Este projeto **não** é uma plataforma multiusuário, não possui grupos públi
 - [`docs/MEDIA_STORAGE.md`](docs/MEDIA_STORAGE.md) — mídia local-first, cache e disponibilidade offline.
 - [`docs/COOKING_MODE.md`](docs/COOKING_MODE.md) — ciclo de vida do modo cozinha e preparos em andamento.
 - [`docs/SHOPPING_LISTS.md`](docs/SHOPPING_LISTS.md) — múltiplas listas de compras nomeadas, lista padrão e geração de itens.
-- [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md) — regras de continuidade do desenvolvimento, incluindo uso de **@Build Web Apps sempre que trouxer benefício real** e a decisão explícita de **não usar ImageGen no fluxo visual sem nova autorização do usuário**.
+- [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md) — regras de continuidade do desenvolvimento, uso de **@Build Web Apps** quando útil, consulta de **@Context7** para APIs/bibliotecas atuais e a decisão explícita de **não usar ImageGen no fluxo visual sem nova autorização do usuário**.
 
 A documentação é atualizada conforme as decisões de produto são aprovadas, para evitar depender apenas do histórico da conversa.
 
-Sessões futuras de desenvolvimento devem ler `docs/DEVELOPMENT_WORKFLOW.md` e as especificações relevantes antes de alterar o produto.
+Sessões futuras de desenvolvimento devem ler `docs/DEVELOPMENT_WORKFLOW.md` e as especificações relevantes antes de alterar o produto. Tarefas de frontend devem ler também `docs/FRONTEND.md` e `docs/UX.md`.
