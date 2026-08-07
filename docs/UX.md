@@ -135,6 +135,20 @@ Modo específico para consulta enquanto a receita está sendo preparada.
 - progresso não deve editar o conteúdo canônico da receita;
 - saída e retomada devem preservar posição local.
 
+### Ciclo de vida do preparo
+
+- iniciar modo cozinha não deve fazer a receita aparecer imediatamente como “já feita”;
+- enquanto houver um preparo local em andamento, voltar à receita deve oferecer **“Retomar preparo”** de forma clara;
+- sair da tela não deve ser tratado como cancelamento automático;
+- **“Finalizar preparo”** é uma ação explícita e distinta de simplesmente sair do modo cozinha;
+- após finalizar, a interface abre a etapa pós-preparo para fotos, avaliações individuais, comentários individuais e observação compartilhada;
+- deve existir **“Encerrar sem registrar”** para abandonar o preparo;
+- como “Encerrar sem registrar” descarta progresso local, deve haver confirmação proporcional e simples;
+- a interface deve comunicar de forma inequívoca a diferença entre **preparo em andamento**, **preparo finalizado** e **preparo abandonado**;
+- um preparo abandonado não deve gerar card, linha do tempo ou outro vestígio no histórico.
+
+A especificação normativa está em `docs/COOKING_MODE.md`.
+
 ### Timers simultâneos
 
 - deve ser possível manter **mais de um timer ativo ao mesmo tempo**;
@@ -173,7 +187,8 @@ O planejador deve parecer uma agenda de refeições, não um calendário corpora
 - destaque para comida/receita e porções;
 - períodos personalizados como Café, Almoço e Jantar devem ser fáceis de reconhecer;
 - adicionar receita a uma data deve exigir poucas ações;
-- gerar compras a partir de um intervalo deve ser uma ação explícita e previsível.
+- gerar compras a partir de um intervalo deve ser uma ação explícita e previsível;
+- não deve sugerir lembretes ou notificações, pois o planejador é somente visual por decisão de produto.
 
 ## 13. Lista de compras
 
@@ -224,7 +239,9 @@ Preferir:
 - “Planejar”;
 - “Compras”;
 - “Histórico”;
-- “Adicionar preparo”;
+- “Retomar preparo”;
+- “Finalizar preparo”;
+- “Encerrar sem registrar”;
 - “Converter unidade”;
 - “Resolver conflito”.
 
