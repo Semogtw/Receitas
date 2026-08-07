@@ -4,7 +4,7 @@ export interface PairInviteDependencies {
   getActivePair(userId: string): Promise<string>
   revokePending(pairId: string, creatorUserId: string): Promise<string[]>
   deleteUser(userId: string): Promise<void>
-  createToken(): Promise<{ raw: string; hash: string }>
+  createNonceHash(): Promise<string>
   inviteUser(email: string, redirectTo: string): Promise<string>
   reserveInvite(input: {
     pairId: string
@@ -51,10 +51,9 @@ export async function runPairInvite(
     }
   }
 
-  const token = await deps.createToken()
   const redirect = new URL('/auth/finish-invite', deps.appBaseUrl)
   redirect.searchParams.set('kind', 'pair')
-  redirect.searchParams.set('pair_invite', token.raw)
+  const tokenHash = await deps.createNonceHash()
 
   let invitedUserId: string
   try {
@@ -65,19 +64,9 @@ export async function runPairInvite(
 
   const expiresAt = new Date(Date.now() + deps.inviteTtlSeconds * 1000).toISOString()
   try {
-    await deps.reserveInvite({
-      pairId,
-      creatorUserId,
-      invitedUserId,
-      tokenHash: token.hash,
-      expiresAt,
-    })
+    await deps.reserveInvite({ pairId, creatorUserId, invitedUserId, tokenHash, expiresAt })
   } catch {
-    try {
-      await deps.deleteUser(invitedUserId)
-    } catch {
-      // The database reservation failed, so this Auth user has no product authorization.
-    }
+    try { await deps.deleteUser(invitedUserId) } catch { /* no product authorization was committed */ }
     throw new PairInvitePublicError(409, 'seat_unavailable', 'A segunda vaga não está mais disponível.')
   }
 
