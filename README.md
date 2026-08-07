@@ -35,6 +35,7 @@ Este projeto **não** é uma plataforma multiusuário, não possui grupos públi
 - [`docs/COOKING_MODE.md`](docs/COOKING_MODE.md) — ciclo de vida do modo cozinha e preparos em andamento.
 - [`docs/SHOPPING_LISTS.md`](docs/SHOPPING_LISTS.md) — múltiplas listas de compras nomeadas, lista padrão e geração de itens.
 - [`docs/SEARCH_FILTERS.md`](docs/SEARCH_FILTERS.md) — busca local-first, filtros combináveis e ordenação de receitas.
+- [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) — tratamento de erros, diagnóstico privado, logs sanitizados e ausência de analytics comportamental por padrão.
 - [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md) — regras de continuidade do desenvolvimento, incluindo quando as ferramentas acima devem entrar no fluxo e a decisão explícita de **não usar ImageGen no fluxo visual sem nova autorização do usuário**.
 
 A documentação é atualizada conforme as decisões de produto são aprovadas, para evitar depender apenas do histórico da conversa.
