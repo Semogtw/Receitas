@@ -102,6 +102,12 @@ Fluxo esperado:
 
 A aplicação não deve bloquear o cadastro de um preparo apenas porque o upload de uma foto ainda não terminou.
 
+A política de armazenamento local é **seletiva**, não uma duplicação obrigatória de toda a biblioteca: capas, miniaturas e mídia recente têm prioridade de cache; originais sincronizados permanecem no Storage privado e podem ser baixados sob demanda. Cada receita pode ser marcada como **Disponibilizar offline**, elevando seus dados e mídia à prioridade de retenção/download local.
+
+Nunca remover a única cópia local de um arquivo enquanto o upload remoto ainda não tiver sido confirmado.
+
+A especificação normativa de cache, download sob demanda e disponibilidade offline está em [`MEDIA_OFFLINE.md`](./MEDIA_OFFLINE.md).
+
 ## 7. Segurança
 
 A especificação normativa de autenticação, bootstrap, convites e fechamento do app está em [`AUTH_SECURITY.md`](./AUTH_SECURITY.md).
@@ -215,6 +221,8 @@ backup.zip
 
 Restauração deve validar versão do formato, integridade básica, associações e pertencimento antes de inserir dados.
 
+A restauração oferece os modos **Mesclar** e **Substituir tudo**. O segundo exige a geração e validação de um backup de segurança do estado atual antes de qualquer alteração destrutiva. A especificação normativa está em [`BACKUP_RESTORE.md`](./BACKUP_RESTORE.md).
+
 ## 12. Exclusão lógica
 
 Entidades recuperáveis usam soft delete, normalmente via `deleted_at` ou mecanismo equivalente.
@@ -245,4 +253,5 @@ O aplicativo não deve transformar conectividade em um banner permanente ou intr
 - Sem sobrescrita silenciosa de conflitos reais.
 - Sem auto-merge quando for necessário interpretar intenção humana.
 - Sem uploads públicos por padrão.
+- Sem depender do cache local como única cópia de mídia sincronizada.
 - Sem arquitetura multi-tenant genérica para vários pares.
