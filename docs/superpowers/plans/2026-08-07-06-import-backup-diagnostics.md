@@ -6,7 +6,7 @@
 
 **Architecture:** Recipe import and privileged restore/account operations run behind authenticated server-side boundaries. Backup ZIP assembly happens on the client from synchronized local structured data plus authenticated private-media downloads, avoiding heavy compression work inside the strict CPU budget of free Edge Functions. Restore is two-phase: the client validates and stages an archive/media set, server endpoints revalidate every staged batch and cross-reference, and only a final commit operation mutates canonical rows.
 
-**Tech Stack:** Supabase Edge Functions/Postgres/Storage, TypeScript, deterministic HTML/JSON-LD parsing, maintained free OSS streaming ZIP library, OPFS when available with bounded Blob fallback, Vitest, Playwright, Codex Security.
+**Tech Stack:** Supabase Edge Functions/Postgres/Storage, TypeScript, deterministic HTML/JSON-LD parsing, `@zip.js/zip.js`, OPFS when available with bounded Blob fallback, Vitest, Playwright, Codex Security.
 
 ## Global Constraints
 
@@ -63,7 +63,19 @@ tests/e2e/diagnostics.spec.ts
 
 ## Stable contracts
 
+`IngredientAmount` is imported from the recipe domain created in plan 04.
+
 ```ts
+export interface ImportedIngredientDraft {
+  raw: string
+  parsed?: {
+    amount: IngredientAmount
+    unit: string | null
+    name: string
+    note: string | null
+  }
+}
+
 export interface ImportedRecipeDraft {
   title: string | null
   description: string | null
@@ -71,7 +83,7 @@ export interface ImportedRecipeDraft {
   servings: string | null
   prepTimeMinutes: number | null
   cookTimeMinutes: number | null
-  ingredients: Array<{ raw: string; parsed?: RecipeIngredientInput }>
+  ingredients: ImportedIngredientDraft[]
   steps: Array<{ instruction: string }>
   imageUrl: string | null
   warnings: string[]
@@ -87,7 +99,25 @@ export interface BackupManifest {
   mediaFiles: Array<{ path: string; sha256: string; bytes: number; mediaType: string }>
 }
 
+export interface BackupArtifact {
+  manifest: BackupManifest
+  filename: string
+  bytes: number
+  sha256: string
+  file: File
+}
+
 export type RestoreMode = 'merge' | 'replace_all'
+export type RestoreJobStatus = 'uploading' | 'validating' | 'ready_to_commit' | 'committing' | 'completed' | 'rejected'
+
+export interface RestoreJobSummary {
+  id: string
+  pairId: string
+  mode: RestoreMode
+  status: RestoreJobStatus
+  manifestSha256: string
+  safetyBackupId: string | null
+}
 ```
 
 ---
@@ -106,7 +136,7 @@ export type RestoreMode = 'merge' | 'replace_all'
 
 - [ ] **Step 1: Write failing Schema.org Recipe tests**
 
-Fixtures must cover direct `Recipe`, `@graph`, ingredient arrays, string/`HowToStep` instructions, ISO-8601 durations, missing optional fields and malformed JSON-LD. Malformed script content is data only and must never execute.
+Fixtures cover direct `Recipe`, `@graph`, ingredient arrays, string/`HowToStep` instructions, ISO-8601 durations, missing optional fields and malformed JSON-LD. Malformed script content is data only and never executes.
 
 - [ ] **Step 2: Implement safe JSON-LD extraction**
 
@@ -145,11 +175,11 @@ git commit -m "feat: add deterministic recipe import parsers"
 
 - [ ] **Step 1: Verify current Supabase Edge runtime network/DNS APIs with @Context7**
 
-Confirm the supported resolver path. Implement `resolveHost(hostname): Promise<string[]>` behind an injected interface. If the runtime has a supported direct DNS resolver, use it. Otherwise use a documented public DNS-over-HTTPS endpoint and preserve the same IP classification/revalidation tests; do not skip address validation.
+Implement `resolveHost(hostname): Promise<string[]>` behind an injected interface. Use the runtime's documented direct DNS resolver when supported. If that API is unavailable, use a documented public DNS-over-HTTPS JSON endpoint with explicit request timeout and response-size limit; both branches feed the same IP classification and redirect validation code.
 
 - [ ] **Step 2: Write failing URL policy tests**
 
-Reject non-http(s), URL credentials, localhost, literal private/link-local/loopback/multicast/reserved IPv4/IPv6, a hostname resolving to forbidden address, redirect to forbidden address and excessive redirects.
+Reject non-http(s), URL credentials, localhost, literal private/link-local/loopback/multicast/reserved IPv4/IPv6, hostname resolving to forbidden address, redirect to forbidden address and excessive redirects.
 
 - [ ] **Step 3: Implement explicit IP classification**
 
@@ -212,7 +242,7 @@ git commit -m "feat: add reviewed recipe import flow"
 
 ---
 
-### Task 4: Define the versioned backup format and streaming client archive writer
+### Task 4: Define the versioned backup format and Zip.js streaming archive writer
 
 **Files:**
 - Create: `src/features/backups/domain/format.ts`
@@ -221,13 +251,18 @@ git commit -m "feat: add reviewed recipe import flow"
 - Create: `src/features/backups/data/archive-writer.test.ts`
 - Create: `src/features/backups/data/backup-service.ts`
 - Create: `src/features/backups/data/backup-service.test.ts`
+- Modify: `package.json`
 
 **Interfaces:**
 - Produces `createCompleteBackup(): Promise<BackupArtifact>` and version-1 `receitas-backup` ZIP.
 
-- [ ] **Step 1: Select a maintained free streaming ZIP library**
+- [ ] **Step 1: Install and pin Zip.js**
 
-Verify current browser/worker support via @Context7/package docs. Prefer a library that accepts streaming entry sources and can write to a `WritableStream`/OPFS target. Photos are already compressed, so use store/no-compression for media entries to avoid wasted CPU.
+```bash
+pnpm add @zip.js/zip.js
+```
+
+Use `ZipWriter`/`ZipWriterStream` and `ZipReader`/`ZipReaderStream` APIs confirmed through @Context7. Photos are already compressed, so media entries use store/no-compression mode; small JSON entries may use normal compression.
 
 - [ ] **Step 2: Write failing manifest tests**
 
@@ -258,21 +293,21 @@ Provider credentials and active session data are forbidden.
 
 - [ ] **Step 4: Implement structured-data export from a synchronized local snapshot**
 
-Before backup begins, require local sync queue to be drained or explicitly report that a full canonical backup cannot yet be produced. Read structured rows from the local database in one consistent snapshot where supported.
+Before backup begins, require the local sync queue to be drained. If it is not drained, return an explicit `backup_requires_sync` error and offer retry after synchronization; never export an archive labeled complete while known mutations are pending. Read structured rows from one consistent local snapshot where the current database API supports it.
 
 - [ ] **Step 5: Implement authenticated media streaming**
 
-For each canonical photo metadata row, use the private Storage adapter to stream/download the original. Reuse the media SHA-256 persisted at successful upload when available; otherwise compute it client-side while streaming and persist it for future exports.
+For each canonical photo metadata row, use the private Storage adapter to download/stream the original. Reuse the SHA-256 persisted at successful upload; if legacy metadata lacks it, compute client-side while streaming and update metadata for future exports.
 
 - [ ] **Step 6: Implement OPFS-first output**
 
-If OPFS writable files are available, stream ZIP output there and expose the resulting file for download/share without retaining all media in JS memory. If OPFS is unavailable, allow a Blob fallback only when estimated backup size is below a conservative tested memory threshold; otherwise show a truthful “este navegador não consegue gerar um backup deste tamanho com segurança” error rather than crashing or silently omitting media.
+When `navigator.storage.getDirectory()`/OPFS writable files are supported, stream ZIP output to an OPFS file, then obtain a `File` handle/result for user download/share. When OPFS is unavailable, use Zip.js `BlobWriter` only if estimated backup size is below a tested conservative `MAX_BLOB_BACKUP_BYTES`; larger backup attempts fail with a clear capability error instead of omitting media or exhausting memory.
 
 - [ ] **Step 7: Run unit tests and commit**
 
 ```bash
 pnpm vitest run src/features/backups/domain/format.test.ts src/features/backups/data/archive-writer.test.ts src/features/backups/data/backup-service.test.ts
-git add src/features/backups
+git add package.json pnpm-lock.yaml src/features/backups
 git commit -m "feat: generate complete client-side backups"
 ```
 
@@ -291,7 +326,7 @@ git commit -m "feat: generate complete client-side backups"
 - Create: tests
 
 **Interfaces:**
-- Produces staged restore job with state `uploading -> validating -> ready_to_commit | rejected`.
+- Produces staged `RestoreJobSummary` state transitions `uploading -> validating -> ready_to_commit | rejected`.
 
 - [ ] **Step 1: Write failing local archive validation tests**
 
@@ -299,23 +334,23 @@ Reject wrong format/version, duplicate/absolute/`..` paths, symlink-like entries
 
 - [ ] **Step 2: Implement central safety limits**
 
-Keep constants in one source file, with tested ceilings derived from current product quotas/runtime limits. They must prevent ZIP-bomb/resource exhaustion while allowing a legitimate backup within the app's supported storage envelope.
+Keep constants in one source file, with tested ceilings derived from current product quotas/runtime limits. They prevent ZIP-bomb/resource exhaustion while allowing a legitimate backup within the supported storage envelope.
 
-- [ ] **Step 3: Implement private staging tables/Storage prefix**
+- [ ] **Step 3: Implement private staging schema/storage**
 
-`restore_jobs` stores authenticated pair, mode, state, manifest hash and validation progress. Parsed structured batches go to staging tables or a validated JSON staging record; media goes under a private `restore-staging/<job-id>/...` prefix. Staging is not canonical product state.
+`restore_jobs` stores authenticated pair, mode, status, manifest hash and validation progress. Parsed structured batches live in staging records/tables; media goes under private `restore-staging/<job-id>/...`. Staging is never read as canonical product state.
 
 - [ ] **Step 4: Stage in bounded batches**
 
-Client streams archive entries, validates locally, uploads verified media/data batches to private staging, and sends checksums/metadata. Each server staging call rechecks auth/pair ownership, declared hash/size and schema. Keep each Edge request comfortably below current free CPU/wall-clock limits.
+Client uses Zip.js streaming reader, validates entries locally, uploads verified media/data batches and sends checksums/metadata. Each server staging call rechecks active pair ownership, declared hash/size and schema. Batch limits keep each Edge request well below current free CPU/wall-clock ceilings.
 
-- [ ] **Step 5: Implement server final-preflight endpoint**
+- [ ] **Step 5: Implement server final-preflight**
 
-Before a job becomes `ready_to_commit`, the server checks that all manifest entries exist in staging, hashes/sizes match, cross-references are valid and no payload can create/replace Auth identities or open membership capacity.
+Before setting `ready_to_commit`, verify every manifest entry exists in staging, hashes/sizes match, domain cross-references are valid and no payload can create/replace Auth identities or open membership capacity.
 
 - [ ] **Step 6: Prove complete preflight**
 
-A corrupt final entry or missing staged object leaves job `rejected` and canonical tables untouched.
+A corrupt final entry/missing staged object leaves the job `rejected` and canonical tables untouched.
 
 - [ ] **Step 7: Commit**
 
@@ -345,19 +380,19 @@ Missing stable IDs insert; identical rows no-op; incompatible same-ID data creat
 
 - [ ] **Step 2: Implement merge commit through normal domain conflict semantics**
 
-Map all data into the current pair authorization boundary. Historical attribution may be preserved as inert backup metadata, but source Auth IDs never become new members.
+Map all data into the current pair authorization boundary. Historical attribution may be preserved as inert backup metadata; source Auth IDs never become new members.
 
 - [ ] **Step 3: Write failing replace-all safety tests**
 
-A replace commit requires a `safety_backup_id` whose archive has already been generated from the current synchronized state, uploaded to a private safety-backup path and passed the same validation pipeline. Missing/invalid safety backup aborts replacement.
+A replace commit requires `safety_backup_id` whose archive was generated from the current synchronized state, uploaded to a private safety-backup path and passed the same validation pipeline. Missing/invalid safety backup aborts replacement.
 
 - [ ] **Step 4: Automate safety backup generation in the restore UI**
 
-When user confirms `replace_all`, the client automatically runs `createCompleteBackup()`, stores/downloads a copy for the user, uploads the same validated archive to the private safety-backup staging area, waits for server validation, then enables the destructive commit call.
+On `replace_all` confirmation, automatically run `createCompleteBackup()`, make the artifact available to the user, upload the same archive to private safety-backup staging, wait for server validation, then enable destructive commit.
 
 - [ ] **Step 5: Implement staged media + transactional structured commit**
 
-Promote/copy validated staged media to safe final object keys before structured DB commit; orphan media from a later DB failure is unreferenced and cleaned by job cleanup. Apply structured replacement in a Postgres transaction so canonical rows never become half-replaced.
+Promote/copy validated staged media to safe final object keys before structured DB commit; orphan media from a later DB failure remains unreferenced and is cleaned by restore-job cleanup. Apply structured replacement in a Postgres transaction so canonical rows never become half-replaced.
 
 - [ ] **Step 6: Implement restore UI**
 
@@ -382,7 +417,7 @@ git commit -m "feat: restore backups with merge and safe replace modes"
 
 - [ ] **Step 1: Write failing lifecycle tests**
 
-Normal user cannot casually remove the other identity; destructive operation requires current provider's strongest practical recent-auth confirmation; shared data does not cascade-delete; pair remains closed; replacement uses a distinct administrative recovery flow; previous authorship remains historical.
+Normal user cannot casually remove the other identity; destructive operation requires the current provider's strongest practical recent-auth confirmation; shared data does not cascade-delete; pair remains closed; replacement uses a distinct administrative recovery flow; previous authorship remains historical.
 
 - [ ] **Step 2: Require safety backup**
 
