@@ -6,6 +6,8 @@
 
 Antes de implementar ou alterar comportamento, consultar os documentos relevantes em `docs/` e preservar as decisões já aprovadas.
 
+Para tarefas de frontend, **`docs/FRONTEND.md` é leitura obrigatória junto de `docs/UX.md` e da especificação funcional da feature**.
+
 Em caso de conflito entre uma sugestão de ferramenta/plugin e a especificação do projeto, **a especificação do projeto vence**.
 
 Decisões novas de produto devem ser documentadas antes ou junto da implementação correspondente, em vez de ficarem somente no histórico da conversa.
@@ -35,7 +37,7 @@ Portanto:
 
 - não gerar conceitos de UI com ImageGen por padrão;
 - não substituir a direção aprovada em `docs/UX.md` por um conceito visual gerado automaticamente;
-- usar `docs/UX.md`, as especificações funcionais e qualquer design explicitamente aprovado como fonte de verdade visual;
+- usar `docs/UX.md`, `docs/FRONTEND.md`, as especificações funcionais e qualquer design explicitamente aprovado como fonte de verdade visual;
 - @Build Web Apps pode e deve continuar sendo usado para engenharia de frontend, revisão, responsividade, testes e QA visual sem ImageGen;
 - ImageGen só pode voltar a fazer parte do fluxo se o usuário autorizar isso explicitamente em uma decisão posterior.
 
@@ -43,11 +45,14 @@ Essa regra prevalece sobre defaults de ferramentas que normalmente sugeririam ge
 
 ## 4. React e qualidade de implementação
 
-A stack aprovada usa React + TypeScript + Vite. Em tarefas React, aproveitar as práticas do @Build Web Apps para:
+A stack aprovada usa React + TypeScript + Vite. Em tarefas React, aproveitar as práticas do @Build Web Apps e de `docs/FRONTEND.md` para:
 
 - evitar waterfalls desnecessários;
 - manter bundle enxuto e carregar código pesado apenas quando necessário;
 - reduzir re-renders evitáveis;
+- evitar estado redundante ou duplicado quando o valor puder ser derivado;
+- evitar `Effect` usado apenas para recalcular estado derivável;
+- usar refs para valores transitórios que não precisam disparar renderização;
 - manter componentes pequenos, claros e reutilizáveis;
 - evitar `App` monolítico;
 - separar estado, helpers e componentes por responsabilidade;
@@ -69,7 +74,8 @@ Quando as capacidades correspondentes do @Build Web Apps estiverem disponíveis:
 5. exercitar pelo menos a interação principal alterada;
 6. conferir um viewport mobile e um desktop quando aplicável;
 7. procurar clipping, overflow, quebras de texto, targets de toque ruins, assets ausentes e regressões de responsividade;
-8. corrigir problemas encontrados antes de considerar a tarefa concluída.
+8. conferir estados relevantes como loading, vazio, erro, offline/sync e tema escuro quando a mudança os atingir;
+9. corrigir problemas encontrados antes de considerar a tarefa concluída.
 
 Se houver Browser integrado, ele deve ser preferido para esse ciclo. Se não estiver disponível ou houver bloqueio real, Playwright pode ser usado como fallback, registrando o motivo.
 
@@ -83,37 +89,78 @@ Ao trabalhar no frontend:
 - não transformar páginas de receita em dashboards SaaS;
 - não adicionar gradientes genéricos, glassmorphism, excesso de cards, badges ou pills;
 - preservar a direção de “caderno/livro de receitas moderno” de `docs/UX.md`;
+- seguir os guardrails anti-template/anti-“cara de IA” de `docs/FRONTEND.md`;
 - tratar fotografia de comida como conteúdo principal, não decoração;
 - manter boa densidade de informação e ergonomia mobile;
 - respeitar todas as decisões já documentadas de navegação, modo cozinha, conflitos, fotos e estados offline.
 
-## 7. Relação com outras ferramentas e skills
+## 7. Uso de @Context7
+
+**Usar @Context7 sempre que uma implementação, correção ou decisão técnica depender de API atual de biblioteca/framework/SDK.**
+
+É especialmente importante para:
+
+- React;
+- Vite;
+- integração PWA/service worker;
+- PowerSync;
+- Supabase;
+- bibliotecas de componentes, animação, formulários, roteamento ou testes;
+- migrações e mudanças de versão;
+- qualquer API cuja sintaxe ou recomendação possa ter mudado desde o treinamento do modelo.
+
+Fluxo esperado:
+
+1. identificar a biblioteca e a versão usada pelo projeto quando disponível;
+2. consultar a documentação atual via Context7;
+3. confirmar que a API/import/configuração proposta existe na versão relevante;
+4. só então escrever ou alterar código dependente desse comportamento.
+
+Não usar Context7 apenas para “decorar” uma resposta quando a tarefa não depende de biblioteca atual. Quando usado, suas conclusões devem ser incorporadas ao código/documentação de forma concreta.
+
+## 8. Relação com outras ferramentas e skills
 
 Usar a ferramenta mais adequada para cada responsabilidade:
 
 - **@Build Web Apps:** frontend React, UI, interação, responsividade, QA visual e revisão de performance do frontend;
+- **@Context7:** documentação atual de bibliotecas/frameworks/SDKs e validação de APIs/configurações;
 - **Superpowers:** processo de design/planejamento, TDD, depuração sistemática, execução e verificação conforme a fase do projeto;
 - **Supabase/Postgres:** modelagem, consultas, RLS, migrações e backend quando essas ferramentas estiverem em uso;
 - demais plugins/skills: somente quando trouxerem capacidade específica relevante.
 
 Uma ferramenta não deve ser usada para substituir outra que tenha responsabilidade mais apropriada.
 
-## 8. Documentação e commits
+## 9. Material de referência visual
+
+O material de referência de frontend fornecido ao projeto foi **adaptado**, não adotado literalmente.
+
+A versão normativa dessas adaptações está em `docs/FRONTEND.md`.
+
+Isso significa, entre outras coisas:
+
+- aproveitar auditoria anti-template, tipografia, estados, acessibilidade, responsividade e disciplina visual;
+- não importar defaults de landing page como AIDA, hero cinematográfico, bento obrigatório, GSAP obrigatório ou randomização de layout;
+- não usar placeholders externos ou animação excessiva apenas porque constavam do material de referência;
+- preservar a natureza utilitária, mobile-first e culinária do Receitas.
+
+## 10. Documentação e commits
 
 Manter a documentação sincronizada com as decisões e com a implementação.
 
 Preferir commits pequenos e descritivos em marcos lógicos, especialmente quando uma sessão puder ser interrompida. Não deixar decisões importantes existirem apenas na memória da sessão.
 
-## 9. Checklist curto para uma tarefa de frontend
+## 11. Checklist curto para uma tarefa de frontend
 
 Antes de concluir uma tarefa de frontend, verificar:
 
-- [ ] li as especificações relevantes;
+- [ ] li `docs/FRONTEND.md`, `docs/UX.md` e a especificação funcional relevante;
 - [ ] usei @Build Web Apps onde trouxe benefício real;
+- [ ] consultei @Context7 se dependi de API/configuração atual de biblioteca;
 - [ ] respeitei a decisão de não usar ImageGen;
 - [ ] preservei a direção visual aprovada;
-- [ ] apliquei boas práticas de React quando pertinentes;
+- [ ] evitei estado React redundante e Effects desnecessários quando aplicável;
 - [ ] testei a interface renderizada e a interação principal;
 - [ ] conferi mobile e desktop quando aplicável;
+- [ ] conferi estados relevantes de loading/erro/offline/sync quando aplicável;
 - [ ] não deixei erro relevante de console conhecido sem explicação;
 - [ ] atualizei documentação se o comportamento ou a arquitetura mudou.
