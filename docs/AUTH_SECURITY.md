@@ -104,13 +104,33 @@ Boas propriedades exigidas:
 
 Se um token expirar ou for invalidado, o primeiro membro pode gerar outro enquanto o par ainda possuir apenas um membro.
 
-## 8. Rate limiting e abuso
+## 8. Recuperação de senha
+
+Cada uma das duas contas existentes pode recuperar o próprio acesso por **redefinição de senha via e-mail**.
+
+Esse fluxo é estritamente de recuperação de identidade já existente e **não é uma superfície de cadastro**.
+
+Regras:
+
+- solicitar recuperação para um e-mail não cria usuário, `pair`, convite ou associação nova;
+- somente uma conta já existente pode concluir a redefinição de senha;
+- concluir a recuperação mantém o mesmo `user_id` e a mesma associação ao `pair`;
+- a recuperação nunca aumenta o número de membros do par;
+- o fluxo continua disponível mesmo depois que o par está fechado;
+- tokens/links de recuperação devem ter validade limitada e ser invalidados conforme as garantias do provedor de autenticação;
+- mensagens públicas de solicitação devem evitar revelar desnecessariamente se determinado e-mail possui conta, quando isso puder ser feito sem prejudicar a experiência;
+- redefinir a senha não deve reabrir bootstrap, convite ou qualquer outra capacidade de criação de conta;
+- o plano de implementação deve verificar o comportamento de sessões existentes após troca de senha e adotar a opção mais segura oferecida pelo provedor.
+
+A recuperação de senha é, portanto, compatível com o princípio de exatamente duas pessoas: ela restaura acesso a uma identidade existente, não cria uma nova identidade autorizada.
+
+## 9. Rate limiting e abuso
 
 Rotas sensíveis como login, bootstrap, criação/aceitação de convite e recuperação de credenciais devem ser protegidas contra tentativas automatizadas em volume.
 
 A estratégia exata pode combinar limites do provedor e controles adicionais no backend, mas a ausência de cadastro público **não elimina** a necessidade de proteger superfícies de autenticação contra abuso.
 
-## 9. Sessão e armazenamento no cliente
+## 10. Sessão e armazenamento no cliente
 
 - tokens de sessão nunca são tratados como autorização absoluta fora das regras de backend;
 - dados locais pertencem a um usuário autenticado e ao `pair` correspondente;
@@ -118,7 +138,7 @@ A estratégia exata pode combinar limites do provedor e controles adicionais no 
 - o plano de implementação deve definir limpeza/isolamento do armazenamento local por identidade para evitar mistura de dados entre sessões;
 - segredos administrativos nunca são persistidos no armazenamento local da PWA.
 
-## 10. Operações privilegiadas
+## 11. Operações privilegiadas
 
 Devem permanecer em ambiente servidor/Edge Function, entre outras:
 
@@ -129,7 +149,7 @@ Devem permanecer em ambiente servidor/Edge Function, entre outras:
 - importação de URL quando envolver fetch servidor;
 - geração/restauração de backup quando exigir acesso abrangente a dados/mídia.
 
-## 11. Invariantes que testes devem cobrir
+## 12. Invariantes que testes devem cobrir
 
 No mínimo:
 
@@ -142,9 +162,13 @@ No mínimo:
 7. usuário autenticado fora do `pair` não lê nem altera dados;
 8. possuir a URL da PWA não permite cadastro;
 9. possuir a chave pública do cliente não contorna RLS;
-10. fechamento do par é aplicado no backend, não apenas na interface.
+10. fechamento do par é aplicado no backend, não apenas na interface;
+11. recuperação de senha funciona para conta existente sem criar nova identidade ou novo membro;
+12. solicitação de recuperação para endereço sem conta não cria usuário;
+13. redefinição de senha preserva `user_id` e associação ao `pair`;
+14. recuperação de senha não reabre bootstrap nem capacidade de convite após fechamento do par.
 
-## 12. Relação com outros documentos
+## 13. Relação com outros documentos
 
 - Requisitos funcionais: `docs/PRODUCT.md`.
 - Arquitetura e RLS: `docs/ARCHITECTURE.md`.
