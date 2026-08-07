@@ -61,7 +61,7 @@ O modo de preparo é composto por etapas ordenáveis. Cada etapa pode conter:
 - duração opcional;
 - observação opcional.
 
-A estrutura deve permitir, no futuro e sem remodelagem, recursos como timers por etapa.
+A estrutura deve permitir timers por etapa sem remodelagem do domínio.
 
 ### 3.4 Estados organizacionais da receita
 
@@ -247,7 +247,19 @@ Características:
 - controles grandes o suficiente para uso com o celular apoiado;
 - avanço simples entre etapas;
 - tentativa de evitar que a tela apague enquanto a plataforma permitir;
-- suporte natural a duração/timer por etapa quando disponível.
+- suporte a timers associados às etapas que possuam duração.
+
+### 14.1 Timers de preparo
+
+- Uma etapa com duração pode iniciar um timer diretamente no modo cozinha.
+- O usuário pode manter **vários timers simultâneos** em execução.
+- Cada timer deve identificar claramente a receita/etapa que o originou quando houver mais de um ativo.
+- O término deve gerar aviso sonoro e, quando a plataforma permitir, notificação do sistema.
+- Pausar, retomar, cancelar e ajustar um timer devem ser ações explícitas e locais.
+- O estado de timers ativos deve sobreviver à navegação interna do PWA e a recarregamentos recuperáveis sempre que tecnicamente possível.
+- O app **não deve prometer execução confiável em segundo plano quando o navegador ou iOS não oferecerem essa garantia**.
+- Quando houver limitação de background, a interface deve informar de maneira clara que o aviso pode depender do app permanecer ativo/aberto, em vez de fingir confiabilidade inexistente.
+- Timers são auxiliares de preparo e não alteram a definição canônica da receita.
 
 ## 15. Fora de escopo por decisão de produto
 
