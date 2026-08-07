@@ -112,6 +112,14 @@ Um preparo pode conter:
 - fotos específicas daquele preparo;
 - referência à versão/snapshot da receita usada naquela ocasião.
 
+### 6.1 Avaliação do preparo
+
+- A avaliação usa escala de **0 a 10**.
+- São aceitos incrementos de **0,5 ponto**: por exemplo, 7; 7,5; 8; 8,5; 9.
+- A nota pertence ao preparo específico, e não substitui o histórico de avaliações anteriores.
+- O preparo também pode conter comentário/observação livre, independentemente da nota.
+- A interface pode calcular e exibir agregados da receita, como média das avaliações, sem perder as notas individuais.
+
 O histórico deve preservar o contexto do passado mesmo que a receita seja editada posteriormente.
 
 ## 7. Fotos
