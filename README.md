@@ -21,6 +21,7 @@ Este projeto **não** é uma plataforma multiusuário, não possui grupos públi
 
 ## Documentação
 
+- [`docs/superpowers/specs/2026-08-07-receitas-design.md`](docs/superpowers/specs/2026-08-07-receitas-design.md) — **especificação final consolidada do design**, aguardando aprovação antes do plano de implementação.
 - [`docs/PRODUCT.md`](docs/PRODUCT.md) — escopo funcional e comportamento do produto.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — arquitetura local-first, sincronização, segurança e backend.
 - [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) — entidades, relacionamentos e regras de dados.
