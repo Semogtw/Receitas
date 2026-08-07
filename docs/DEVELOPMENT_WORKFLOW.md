@@ -14,6 +14,26 @@ Em caso de conflito entre uma sugestão de ferramenta/plugin e a especificação
 
 Decisões novas de produto devem ser documentadas antes ou junto da implementação correspondente, em vez de ficarem somente no histórico da conversa.
 
+### 1.1 Autonomia para decisões técnicas
+
+O usuário delegou as decisões **puramente técnicas** aos agentes de desenvolvimento, com duas condições obrigatórias:
+
+1. a solução escolhida deve manter **custo recorrente obrigatório de US$ 0**;
+2. entre as opções gratuitas compatíveis, deve ser escolhida a alternativa tecnicamente melhor para o projeto, considerando segurança, robustez, manutenção, portabilidade, simplicidade e aderência às especificações.
+
+Portanto, não é necessário pedir aprovação do usuário para cada escolha de biblioteca, ferramenta de teste, host, organização de código, configuração de build ou detalhe de infraestrutura quando a decisão não muda comportamento de produto e respeita essas condições.
+
+Ainda é necessário consultar o usuário quando a decisão:
+
+- muda comportamento ou fluxo visível do produto;
+- reduz feature já aprovada;
+- altera privacidade ou expectativa de segurança de maneira material;
+- cria custo obrigatório;
+- exige informação pessoal/credencial que o agente não possui;
+- envolve trade-off de produto genuíno em vez de escolha de engenharia.
+
+Toda decisão técnica material deve continuar sendo documentada no repositório e validada com fontes atuais quando depender de APIs, planos ou limites que possam mudar.
+
 ## 2. Uso de @Build Web Apps
 
 **Usar @Build Web Apps sempre que estiver disponível e houver benefício real para a tarefa.**
@@ -151,7 +171,8 @@ Resumo de responsabilidades:
 - **GitHub:** fonte de verdade persistente, documentação, histórico e commits;
 - **Supabase:** schema, SQL, RLS, Auth, Storage, Edge Functions e diagnóstico do backend quando a implementação correspondente existir;
 - **Figma/Canva:** opcionais para trabalho visual explicitamente útil, sem reabrir ImageGen por padrão;
-- **Vercel:** somente se for escolhida para uma tarefa concreta de deploy/preview;
+- **Cloudflare Pages:** host preferencial do frontend enquanto permanecer a melhor opção gratuita compatível;
+- **Vercel:** fallback de deploy/preview se houver incompatibilidade real com a opção preferencial;
 - **OpenAI Developers:** somente se uma integração de IA for explicitamente aprovada;
 - **Plugin Management:** descoberta/gestão de plugins quando faltar capacidade externa relevante;
 - demais plugins/connectors: somente quando a tarefa realmente envolver o sistema correspondente.
@@ -193,4 +214,5 @@ Antes de concluir uma tarefa de frontend, verificar:
 - [ ] conferi estados relevantes de loading/erro/offline/sync quando aplicável;
 - [ ] não deixei erro relevante de console conhecido sem explicação;
 - [ ] considerei Codex Security quando a mudança tocou superfície sensível;
+- [ ] mantive custo recorrente obrigatório em US$ 0 em decisões técnicas;
 - [ ] atualizei documentação se o comportamento ou a arquitetura mudou.
