@@ -13,6 +13,10 @@
 - Conflitos são entidades explícitas, não apenas logs descartáveis.
 - Fotos da receita e fotos de preparos possuem ciclos de vida distintos.
 - Avaliações e comentários de preparos pertencem individualmente a cada membro; observações compartilhadas pertencem ao preparo.
+- Entidades sincronizáveis usam IDs estáveis e metadados de versão suficientes para detectar concorrência.
+- Auto-merge só é permitido quando a união for inequivocamente segura; ambiguidades viram conflito explícito.
+
+A política normativa de sincronização está em [`SYNC.md`](./SYNC.md).
 
 ## 2. Entidades principais
 
@@ -82,9 +86,9 @@ Ingrediente estruturado e ordenado.
 
 Campos conceituais:
 
-- `id`;
+- `id` estável próprio;
 - `recipe_id`;
-- `position`;
+- `position` ou mecanismo de ordenação equivalente;
 - quantidade estruturada;
 - unidade;
 - nome exibido do ingrediente;
@@ -96,20 +100,24 @@ Campos conceituais:
 
 A quantidade não deve depender apenas de `float`. O modelo precisa preservar precisão suficiente para frações culinárias e permitir valores não numéricos quando semanticamente necessários.
 
+A posição nunca deve ser usada como identidade do ingrediente. Reordenação concorrente deve seguir a política de `SYNC.md`.
+
 ### `recipe_steps`
 
 Etapa estruturada do preparo.
 
 Campos conceituais:
 
-- `id`;
+- `id` estável próprio;
 - `recipe_id`;
-- `position`;
+- `position` ou mecanismo de ordenação equivalente;
 - instrução;
 - duração opcional;
 - observação opcional;
 - metadados de versão;
 - estado de exclusão quando necessário.
+
+A posição nunca deve ser usada como identidade da etapa.
 
 ## 4. Categorias
 
@@ -147,11 +155,14 @@ Campos conceituais:
 - flag ou relacionamento de capa;
 - estado de upload;
 - metadados do arquivo;
+- metadados de versão quando o registro for editável;
 - `deleted_at`.
 
 ### `cooking_session_photos`
 
 Mídia de uma execução específica. Nunca deve ser misturada semanticamente com `recipe_photos`.
+
+Uploads binários usam fila separada da sincronização dos metadados. Falha de upload não desfaz o registro do preparo ou da receita.
 
 ## 6. Histórico de preparos
 
@@ -170,6 +181,7 @@ Campos conceituais:
 - `shared_observation`, opcional, para anotação conjunta do preparo;
 - referência de versão;
 - snapshot suficiente para preservar o estado relevante da receita usada naquele preparo;
+- metadados de versionamento e sincronização;
 - `deleted_at`.
 
 A entidade do preparo **não armazena uma única nota compartilhada**. A observação compartilhada também não substitui os comentários pessoais dos membros.
@@ -198,6 +210,7 @@ Invariantes:
 - um preparo pode existir sem avaliações;
 - a ausência de avaliação de um membro não invalida a avaliação do outro;
 - comentário individual e `shared_observation` são campos semanticamente distintos e não devem ser fundidos durante sincronização ou resolução de conflitos;
+- avaliações dos dois membros são entidades independentes e podem sincronizar simultaneamente sem conflito entre si;
 - médias são valores derivados e não precisam ser persistidas como fonte de verdade.
 
 Agregados possíveis derivados em leitura:
@@ -229,6 +242,7 @@ Campos conceituais:
 - `pair_id`;
 - nome;
 - posição/ordem opcional;
+- metadados de versão quando editável;
 - `deleted_at`.
 
 ### `meal_plan_entries`
@@ -243,6 +257,7 @@ Campos conceituais:
 - horário opcional;
 - porções planejadas;
 - observação opcional;
+- metadados de versionamento e sincronização;
 - `deleted_at`.
 
 ## 8. Lista de compras
@@ -255,7 +270,7 @@ A modelagem não deve impedir múltiplas listas no futuro, ainda que a experiên
 
 Campos conceituais:
 
-- `id`;
+- `id` estável;
 - `shopping_list_id`;
 - `pair_id` ou associação inequívoca à lista do par;
 - nome do item;
@@ -266,7 +281,7 @@ Campos conceituais:
 - origem manual ou gerada;
 - referência opcional a receita/planejamento;
 - posição;
-- metadados de sincronização;
+- metadados de sincronização e versão;
 - `deleted_at`.
 
 ## 9. Perfis de conversão de ingredientes
@@ -300,11 +315,11 @@ O nome normalizado do ingrediente é usado para buscar perfis, mas o sistema dev
 
 ### `imports`
 
-Registra tentativas de importar receitas por URL.
+Registra tentativas de importar receitas por URL ou texto.
 
 Pode conter:
 
-- URL de origem;
+- URL de origem quando aplicável;
 - data;
 - usuário;
 - estado da importação;
@@ -314,6 +329,8 @@ Pode conter:
 
 O resultado importado só vira receita definitiva após revisão do usuário.
 
+A especificação detalhada do importador está em [`IMPORTING.md`](./IMPORTING.md).
+
 ## 11. Conflitos
 
 ### `conflicts`
@@ -322,18 +339,29 @@ Registro explícito de edição concorrente.
 
 Campos conceituais:
 
-- entidade e `entity_id`;
+- `id`;
+- tipo da entidade;
+- `entity_id`;
 - `pair_id`;
 - versão/base comum conhecida;
-- versão A;
-- versão B;
+- versão ou alteração A;
+- versão ou alteração B;
 - estado: aberto/resolvido;
 - estratégia de resolução;
 - resultado resolvido;
 - responsável pela resolução;
-- timestamps.
+- timestamps;
+- metadados opcionais da operação/dispositivo quando úteis para diagnóstico.
 
-Conflitos não devem ser apagados automaticamente logo após resolução, pois fazem parte da explicabilidade e proteção contra perda de dados.
+Invariantes:
+
+- conflito aberto preserva todas as versões necessárias para resolução;
+- resolver conflito produz uma nova versão explícita da entidade;
+- conflito não é criado quando alterações concorrentes forem demonstravelmente independentes e puderem ser mescladas com segurança;
+- exclusão concorrendo com edição da mesma entidade gera conflito;
+- conflitos não devem ser apagados automaticamente logo após resolução, pois fazem parte da explicabilidade e proteção contra perda de dados.
+
+A definição de quais alterações podem ser auto-mescladas está em [`SYNC.md`](./SYNC.md).
 
 ## 12. Exclusão e lixeira
 
@@ -346,7 +374,8 @@ Regras:
 - soft delete sincroniza como alteração normal;
 - restauração limpa o estado de exclusão de forma explícita;
 - exclusão definitiva exige ação específica;
-- cascatas destrutivas devem ser evitadas para conteúdo recuperável.
+- cascatas destrutivas devem ser evitadas para conteúdo recuperável;
+- soft delete participa do versionamento e pode conflitar com edição concorrente.
 
 ## 13. Estado local de sincronização
 
@@ -359,6 +388,17 @@ Exemplos conceituais:
 - cache de arquivos;
 - metadados transitórios de retry;
 - indicadores de conectividade.
+
+Cada operação pendente deve poder carregar, conforme a implementação:
+
+- ID estável da operação;
+- entidade alvo;
+- tipo de operação;
+- base/revisão conhecida;
+- payload necessário;
+- estado de tentativa;
+- último erro relevante;
+- timestamps.
 
 Essas estruturas não devem ser confundidas com o modelo de negócio remoto.
 
