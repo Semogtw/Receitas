@@ -49,14 +49,32 @@ tests/e2e/search.spec.ts
 
 ## Stable contracts
 
+`Rational` and `IngredientAmount` are imported from the recipe domain created in plan 04.
+
 ```ts
+export interface MealPeriod {
+  id: string
+  pairId: string
+  name: string
+  position: number
+  revision: number
+  deletedAt: string | null
+}
+
 export interface MealPlanEntryInput {
   recipeId: string
-  date: string // YYYY-MM-DD in product-local date semantics
+  date: string
   mealPeriodId: string
   time: string | null
   servings: Rational | null
   note: string | null
+}
+
+export interface MealPlanEntry extends MealPlanEntryInput {
+  id: string
+  pairId: string
+  revision: number
+  deletedAt: string | null
 }
 
 export interface ShoppingSource {
@@ -73,6 +91,28 @@ export interface ShoppingItemDraft {
   source: ShoppingSource
 }
 
+export interface ShoppingList {
+  id: string
+  pairId: string
+  name: string
+  isDefault: boolean
+  revision: number
+  deletedAt: string | null
+}
+
+export interface ShoppingItem extends ShoppingItemDraft {
+  id: string
+  listId: string
+  pairId: string
+  purchased: boolean
+  revision: number
+  deletedAt: string | null
+}
+
+export type ShoppingItemPatch = Partial<
+  Pick<ShoppingItem, 'name' | 'normalizedName' | 'amount' | 'unit' | 'purchased'>
+>
+
 export interface RecipeSearchQuery {
   text: string
   categoryIds: string[]
@@ -80,6 +120,18 @@ export interface RecipeSearchQuery {
   wantToMake: boolean | null
   alreadyMade: boolean | null
   sort: 'recent' | 'name' | 'most_prepared' | 'best_rated'
+}
+
+export interface RecipeSearchResult {
+  recipeId: string
+  title: string
+  coverPhotoId: string | null
+  favorite: boolean
+  wantToMake: boolean
+  alreadyMade: boolean
+  preparationCount: number
+  averageRating: number | null
+  updatedAt: string
 }
 ```
 
@@ -99,12 +151,7 @@ export interface RecipeSearchQuery {
 
 - [ ] **Step 1: Write failing planner repository tests**
 
-Cover:
-- create/rename/reorder meal periods;
-- create/edit/delete/restore meal-plan entry;
-- entry references recipe + date + meal period + optional time/servings/note;
-- offline write appears immediately;
-- planner mutation uses versioned local mutation path.
+Cover create/rename/reorder meal periods, create/edit/delete/restore meal-plan entry, recipe/date/period/time/servings/note persistence, immediate offline visibility and versioned mutation writes.
 
 - [ ] **Step 2: Implement repository methods**
 
@@ -120,7 +167,7 @@ softDeleteEntry(id: string): Promise<void>
 
 - [ ] **Step 3: Align date semantics**
 
-Persist planner date as date-only value rather than deriving it from UTC timestamp. Optional time is a separate local-time field. Do not let timezone conversion shift a planned meal to another day.
+Persist planner date as date-only value rather than deriving it from UTC timestamp. Optional time is separate local-time data. Timezone conversion must not shift a planned meal to another day.
 
 - [ ] **Step 4: Run tests and commit**
 
@@ -141,9 +188,6 @@ git commit -m "feat: add shared meal planner repository"
 - Create: component tests
 - Modify: `src/app/routes/PlannerRoute.tsx`
 
-**Interfaces:**
-- Consumes `PlannerRepository`.
-
 - [ ] **Step 1: Write interaction tests**
 
 Test selecting date, adding recipe, choosing period, adjusting servings, editing/removing entry and editing custom meal periods.
@@ -152,7 +196,7 @@ Test selecting date, adding recipe, choosing period, adjusting servings, editing
 
 Use a meal agenda/list/calendar hybrid that remains readable on narrow screens. It should look like a meal planner, not a corporate scheduling calendar.
 
-- [ ] **Step 3: Ensure planner is visual-only**
+- [ ] **Step 3: Enforce visual-only planner behavior**
 
 Do not request notification permission, register meal reminder jobs or add notification toggles.
 
@@ -182,17 +226,11 @@ git commit -m "feat: add shared visual meal planner"
 - Verify: `supabase/migrations/0003_planning_domain.sql`
 
 **Interfaces:**
-- Produces `ShoppingRepository` with multiple named lists and exactly zero-or-one default list.
+- Produces `ShoppingRepository` with multiple named lists and zero-or-one default list.
 
 - [ ] **Step 1: Write failing repository tests**
 
-Cover:
-- create multiple named lists;
-- set default atomically and unset previous default;
-- manual item add/edit/remove/check/uncheck;
-- generated item retains origin metadata;
-- both users' updates use normal conflict-safe sync path;
-- list soft-delete does not delete unrelated lists.
+Cover multiple named lists, atomic default switching, manual item add/edit/remove/check/uncheck, generated source metadata, conflict-safe writes and isolated soft deletion.
 
 - [ ] **Step 2: Implement repository**
 
@@ -208,7 +246,7 @@ softDeleteItem(id: string): Promise<void>
 
 - [ ] **Step 3: Verify server invariant**
 
-The partial unique index from plan 02 must enforce at most one active default list per pair even under concurrent writes.
+The partial unique index from plan 02 enforces at most one active default list per pair under concurrent writes.
 
 - [ ] **Step 4: Run tests and commit**
 
@@ -233,26 +271,19 @@ git commit -m "feat: add multiple shared shopping lists"
 
 - [ ] **Step 1: Write failing recipe-generation tests**
 
-Test one/multiple recipes, requested servings, planner entries and manual `a gosto` amounts. Scaling must occur before unit conversion/consolidation.
+Test one/multiple recipes, requested servings, planner entries and manual text amounts. Scaling occurs before conversion/consolidation.
 
 - [ ] **Step 2: Implement raw item generation**
 
-Each recipe ingredient becomes a `ShoppingItemDraft` preserving origin. Do not consolidate yet.
+Each recipe ingredient becomes a `ShoppingItemDraft` preserving origin; no consolidation in this function.
 
 - [ ] **Step 3: Write failing consolidation tests**
 
-Cover:
-- same normalized ingredient + compatible units sums;
-- mL + L sums by direct conversion;
-- g + kg sums;
-- mass + volume only sums with known ingredient profile;
-- unknown density remains separate;
-- text amount such as `a gosto` remains a distinct human-readable item;
-- incompatible notes may prevent automatic merge when merging would lose meaning.
+Cover same normalized ingredient + compatible units, mL+L, g+kg, mass+volume only with known profile, unknown density staying separate, text amount staying human-readable and incompatible notes preventing merge when meaning would be lost.
 
 - [ ] **Step 4: Implement conservative consolidation**
 
-Use the conversion engine from plan 04. Consolidation output must retain a list of contributing source references for explanation.
+Use the plan-04 conversion engine and retain every source reference.
 
 ```ts
 export interface ConsolidatedShoppingItem extends ShoppingItemDraft {
@@ -280,24 +311,21 @@ git commit -m "feat: generate and consolidate shopping ingredients"
 - Create: component tests
 - Modify: `src/app/routes/ShoppingRoute.tsx`
 
-**Interfaces:**
-- Consumes repositories/generation/consolidation.
-
 - [ ] **Step 1: Write interaction tests**
 
-Test list switching/default marker, quick manual add, purchased toggle, editing amount/unit, remove, adding from selected recipes, adding from planner date range and reviewing consolidated preview before insertion.
+Test list switching/default marker, quick manual add, purchased toggle, editing amount/unit, remove, selected-recipes generation, planner-range generation and consolidated preview review.
 
 - [ ] **Step 2: Implement market-friendly list detail**
 
-Large touch targets, quick check/uncheck, purchased items visually de-emphasized but still recoverable, origin available on demand without cluttering every row.
+Use large touch targets, quick check/uncheck, de-emphasized purchased items and origin on demand.
 
 - [ ] **Step 3: Implement generation preview**
 
-Before adding generated items, show consolidated results and clearly mark approximate conversions. Allow user edits/removal before confirming.
+Show consolidated results before insertion and label approximate conversions; allow item edits/removal before confirming.
 
 - [ ] **Step 4: Rendered QA with @Build Web Apps**
 
-Test one-handed mobile use, long list scrolling, offline state, dark theme and rapid check/uncheck without layout jumps.
+Test one-handed mobile use, long scrolling, offline state, dark theme and rapid toggles without layout jumps.
 
 - [ ] **Step 5: Commit**
 
@@ -321,23 +349,23 @@ git commit -m "feat: add shared shopping list experience"
 
 - [ ] **Step 1: Write failing normalization/search tests**
 
-Test accent/case normalization in Portuguese, partial title match, ingredient match, category match and description/note match. Querying must not require network.
+Test Portuguese accent/case normalization, partial title, ingredient, category and description/note match without network.
 
 - [ ] **Step 2: Implement normalization**
 
-Use deterministic locale-aware lowercasing/diacritic normalization suitable for search without altering canonical stored content.
+Use deterministic locale-aware lowercasing/diacritic normalization for search only; canonical text remains unchanged.
 
 - [ ] **Step 3: Write failing filter tests**
 
-Multiple selected categories combine according to the product rule chosen in `SEARCH_FILTERS.md`; encode that explicitly in tests. Favorite/want-to-make/already-made filters combine with text search.
+Encode the category-combination rule from `SEARCH_FILTERS.md` explicitly. Combine favorite/want-to-make/already-made filters with text search.
 
 - [ ] **Step 4: Write failing sort tests**
 
-Recent uses recipe relevant update/create timestamp. Name uses locale-aware comparison. Most prepared derives count from non-deleted cooking sessions. Best rated derives existing ratings only; unrated recipes sort after rated recipes rather than as zero.
+Recent uses relevant timestamps; name uses locale-aware comparison; most prepared derives non-deleted cooking sessions; best rated uses existing ratings only and places unrated after rated rather than as zero.
 
-- [ ] **Step 5: Implement a rebuildable local index**
+- [ ] **Step 5: Implement rebuildable local index**
 
-For the initial two-person dataset, prefer SQL views/queries or a compact local-only index. If an auxiliary index is created, implement:
+Prefer local SQL queries/views first. If an auxiliary local-only index is measurably useful, implement exactly:
 
 ```ts
 rebuildSearchIndex(): Promise<void>
@@ -345,7 +373,7 @@ updateSearchIndexForRecipe(recipeId: string): Promise<void>
 clearSearchIndex(): Promise<void>
 ```
 
-Deleting the index must never lose canonical recipe data.
+Deleting the index can never lose canonical recipe data.
 
 - [ ] **Step 6: Run tests and commit**
 
@@ -366,24 +394,21 @@ git commit -m "feat: add offline recipe search filters and sorting"
 - Create: component tests
 - Modify: `src/app/routes/RecipesRoute.tsx`
 
-**Interfaces:**
-- Adds search/discovery to the existing Recipes route.
-
 - [ ] **Step 1: Write UI tests**
 
 Test text search, clearing, multi-category filtering, favorite/want-to-make/already-made toggles and sort changes.
 
 - [ ] **Step 2: Implement compact controls**
 
-Do not turn each filter into decorative pills by default. Use a compact filter surface/sheet appropriate to mobile and preserve result count/active-state clarity.
+Do not turn every filter into decorative pills. Use a compact mobile surface/sheet and keep active-state/result-count clarity.
 
-- [ ] **Step 3: Preserve URL/local state appropriately**
+- [ ] **Step 3: Preserve navigation state appropriately**
 
-Search state may be reflected in query parameters if it improves back-navigation; do not persist it as synchronized product data.
+Search state may use URL query parameters for back-navigation; it is not synchronized product data.
 
 - [ ] **Step 4: Rendered QA**
 
-Use @Build Web Apps with 0, 1, many and long-title results, mobile+desktop and dark theme.
+Use @Build Web Apps with zero/one/many/long-title results, mobile+desktop and dark theme.
 
 - [ ] **Step 5: Commit**
 
@@ -403,19 +428,19 @@ git commit -m "feat: add recipe discovery controls"
 
 - [ ] **Step 1: Add planner→shopping E2E**
 
-Create meal periods → plan recipes with servings → generate shopping list for date range → review consolidated items → check items offline → reconnect and verify shared state.
+Create meal periods → plan recipes/servings → generate shopping for date range → review consolidation → check items offline → reconnect and verify shared state.
 
 - [ ] **Step 2: Add multiple-list E2E**
 
-Create Mercado and Atacado → set one default → add manual/generated items → switch default → verify only one default remains.
+Create Mercado/Atacado → set/switch default → add manual/generated items → verify only one default.
 
 - [ ] **Step 3: Add local-search offline E2E**
 
-Load data online → go offline → search by ingredient/category → filter already-made/favorite → sort most-prepared/best-rated → expect correct local results.
+Load data online → offline → search ingredient/category → filter already-made/favorite → sort most-prepared/best-rated → verify local results.
 
 - [ ] **Step 4: Run cross-browser and rendered QA**
 
-Chromium and WebKit critical flows plus @Build Web Apps visual checks.
+Chromium/WebKit critical flows plus @Build Web Apps visual checks.
 
 - [ ] **Step 5: Commit**
 
@@ -439,15 +464,15 @@ pnpm test:e2e:smoke
 
 - [ ] **Step 2: Verify no server-search dependency exists**
 
-Search code for recipe search calls to Supabase/remote APIs. Search/filter/sort must function from local database state.
+Recipe search/filter/sort must not require Supabase/remote search APIs.
 
-- [ ] **Step 3: Verify no notification path exists for meal planning**
+- [ ] **Step 3: Verify no meal-notification path exists**
 
-Meal planner may not request or schedule notifications.
+Planner may not request or schedule notifications.
 
 - [ ] **Step 4: Verify consolidation never guesses density**
 
-Inspect all mass↔volume conversion call sites for required profile result.
+Inspect every mass↔volume call site for a required profile result.
 
 - [ ] **Step 5: Commit fixes and mark plan complete**
 
