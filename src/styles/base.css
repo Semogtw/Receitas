@@ -312,3 +312,68 @@ svg {
     font-size: var(--font-size-sm);
   }
 }
+
+.button {
+  min-height: var(--tap-min);
+  padding: var(--space-2) var(--space-4);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-md);
+  font-weight: 700;
+}
+
+.button--primary {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.button--primary:hover {
+  background: var(--color-accent-hover);
+}
+
+.button--quiet {
+  border-color: var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+}
+
+.pwa-status {
+  position: fixed;
+  z-index: var(--z-toast);
+  right: var(--space-4);
+  bottom: calc(5.35rem + env(safe-area-inset-bottom));
+  left: var(--space-4);
+  display: grid;
+  gap: var(--space-4);
+  max-width: 34rem;
+  margin-inline: auto;
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-strong);
+  box-shadow: var(--shadow-raised);
+}
+
+.pwa-status strong {
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
+.pwa-status p {
+  margin-bottom: 0;
+  color: var(--color-muted);
+}
+
+.pwa-status__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+@media (min-width: 54rem) {
+  .pwa-status {
+    right: var(--space-6);
+    bottom: var(--space-6);
+    left: auto;
+    margin-inline: 0;
+  }
+}
