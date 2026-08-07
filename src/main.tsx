@@ -4,15 +4,8 @@ import { App } from './app/App'
 import './styles/tokens.css'
 import './styles/themes.css'
 import './styles/base.css'
+import './styles/auth.css'
 
 const rootElement = document.getElementById('root')
-
-if (!rootElement) {
-  throw new Error('Application root element is missing')
-}
-
-createRoot(rootElement).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+if (!rootElement) throw new Error('Application root element is missing')
+createRoot(rootElement).render(<StrictMode><App /></StrictMode>)

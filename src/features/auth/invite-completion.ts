@@ -8,9 +8,8 @@ export async function completeInvitation(input: {
   password: string
   pairInviteToken?: string | null
 }): Promise<void> {
-  if (input.password.length < 12) {
-    throw new Error('A senha precisa ter pelo menos 12 caracteres.')
-  }
+  if (input.password.length < 12) throw new Error('A senha precisa ter pelo menos 12 caracteres.')
+  if (input.kind === 'pair' && !input.pairInviteToken) throw new Error('O vínculo do convite está ausente. Peça um novo convite.')
 
   const supabase = getSupabaseClient()
   const { error: passwordError } = await supabase.auth.updateUser({ password: input.password })
@@ -22,11 +21,7 @@ export async function completeInvitation(input: {
     return
   }
 
-  if (!input.pairInviteToken) {
-    throw new Error('O vínculo do convite está ausente. Peça um novo convite.')
-  }
-
-  const inviteTokenHash = await sha256Hex(input.pairInviteToken)
+  const inviteTokenHash = await sha256Hex(input.pairInviteToken!)
   const { error } = await supabase.rpc('accept_pair_invite', { invite_token_hash: inviteTokenHash })
   if (error) throw error
 }
