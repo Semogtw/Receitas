@@ -17,6 +17,7 @@ Este projeto **não** é uma plataforma multiusuário, não possui grupos públi
 - **Dados portáveis:** backup e restauração fazem parte do produto.
 - **PWA privada:** sem publicação em App Store; foco em instalação pela tela inicial e uso cotidiano no celular.
 - **Visual culinário, não genérico:** a interface deve lembrar um caderno/livro de receitas moderno, sem estética de dashboard SaaS ou template gerado por IA.
+- **Custo obrigatório zero:** decisões técnicas devem preservar custo recorrente obrigatório de US$ 0 e escolher a melhor alternativa gratuita compatível.
 
 ## Documentação
 
@@ -36,7 +37,9 @@ Este projeto **não** é uma plataforma multiusuário, não possui grupos públi
 - [`docs/SHOPPING_LISTS.md`](docs/SHOPPING_LISTS.md) — múltiplas listas de compras nomeadas, lista padrão e geração de itens.
 - [`docs/SEARCH_FILTERS.md`](docs/SEARCH_FILTERS.md) — busca local-first, filtros combináveis e ordenação de receitas.
 - [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) — tratamento de erros, diagnóstico privado, logs sanitizados e ausência de analytics comportamental por padrão.
-- [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md) — regras de continuidade do desenvolvimento, incluindo quando as ferramentas acima devem entrar no fluxo e a decisão explícita de **não usar ImageGen no fluxo visual sem nova autorização do usuário**.
+- [`docs/DEPLOYMENT_OPERATIONS.md`](docs/DEPLOYMENT_OPERATIONS.md) — deploy gratuito, Cloudflare Pages, Supabase/PowerSync Free, hibernação e operação.
+- [`docs/TESTING.md`](docs/TESTING.md) — estratégia de testes com Vitest, Testing Library, Playwright, offline, segurança e QA.
+- [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md) — regras de continuidade do desenvolvimento, autonomia técnica de custo zero, uso de ferramentas/plugins e a decisão explícita de **não usar ImageGen no fluxo visual sem nova autorização do usuário**.
 
 A documentação é atualizada conforme as decisões de produto são aprovadas, para evitar depender apenas do histórico da conversa.
 
