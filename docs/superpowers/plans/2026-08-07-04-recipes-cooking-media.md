@@ -63,8 +63,10 @@ tests/e2e/media-offline.spec.ts
 
 ## Stable domain contracts
 
+`Rational` is exact within the project's invariant: numerator and denominator are finite JavaScript safe integers, denominator is positive, and every value is reduced by GCD. This is more than sufficient for culinary quantities while remaining natively JSON/SQLite/Postgres transportable.
+
 ```ts
-export type Rational = { numerator: bigint; denominator: bigint }
+export type Rational = { numerator: number; denominator: number }
 
 export type IngredientAmount =
   | { kind: 'numeric'; value: Rational }
@@ -96,13 +98,19 @@ export interface ConversionProfile {
   gramsPerMilliliter: number
   source: 'default' | 'pair_override'
 }
+
+export interface PersistedIngredientAmount {
+  quantityNum: number | null
+  quantityDen: number | null
+  quantityText: string | null
+}
 ```
 
-Persistence maps numeric amounts to exact numerator/denominator integer columns; human expressions such as “a gosto” use the text branch. Do not store binary floating-point as the canonical recipe quantity.
+Persistence maps numeric amounts to exact integer numerator/denominator columns; human expressions such as “a gosto” use the text column. Every amount entering a mutation envelope is therefore JSON-safe without losing fractional exactness.
 
 ---
 
-### Task 1: Implement exact ingredient amounts and serving scaling
+### Task 1: Implement exact ingredient amounts, persistence mapping and serving scaling
 
 **Files:**
 - Create: `src/features/recipes/domain/types.ts`
@@ -114,20 +122,20 @@ Persistence maps numeric amounts to exact numerator/denominator integer columns;
 - Modify: `src/data/schema.ts`
 
 **Interfaces:**
-- Produces `parseAmount`, `formatAmount`, `multiplyRational`, `scaleIngredient`, `scaleRecipeIngredients`.
+- Produces `normalizeRational`, `parseAmount`, `formatAmount`, `serializeIngredientAmount`, `deserializeIngredientAmount`, `multiplyRational`, `scaleIngredient`, `scaleRecipeIngredients`.
 
 - [ ] **Step 1: Write failing rational/format tests**
 
 Cover:
 
 ```ts
-expect(parseAmount('1/2')).toEqual({ kind: 'numeric', value: { numerator: 1n, denominator: 2n } })
-expect(parseAmount('1 1/2')).toEqual({ kind: 'numeric', value: { numerator: 3n, denominator: 2n } })
+expect(parseAmount('1/2')).toEqual({ kind: 'numeric', value: { numerator: 1, denominator: 2 } })
+expect(parseAmount('1 1/2')).toEqual({ kind: 'numeric', value: { numerator: 3, denominator: 2 } })
 expect(parseAmount('a gosto')).toEqual({ kind: 'text', text: 'a gosto' })
-expect(formatAmount({ kind: 'numeric', value: { numerator: 3n, denominator: 2n } })).toBe('1 1/2')
+expect(formatAmount({ kind: 'numeric', value: { numerator: 3, denominator: 2 } })).toBe('1 1/2')
 ```
 
-Also test denominator normalization, negative/zero invalid input policy and decimal input such as `0,5` in pt-BR.
+Also test denominator normalization, zero denominator rejection, `Number.isSafeInteger` enforcement and decimal input such as `0,5` in pt-BR.
 
 - [ ] **Step 2: Verify RED**
 
@@ -135,13 +143,34 @@ Run the exact Vitest files.
 
 - [ ] **Step 3: Implement exact rational helpers**
 
-Normalize every rational by GCD and force positive denominator. Parse comma and dot decimals deterministically into integer fractions.
+`normalizeRational` rejects non-safe-integers and denominator zero, forces a positive denominator and reduces by integer GCD. Decimal parsing converts the decimal string to an exact power-of-ten fraction before reduction; it never relies on a floating-point multiplication to create the canonical fraction.
 
-- [ ] **Step 4: Write failing scaling tests**
+- [ ] **Step 4: Write failing persistence mapping tests**
+
+```ts
+expect(serializeIngredientAmount({
+  kind: 'numeric',
+  value: { numerator: 3, denominator: 2 },
+})).toEqual({ quantityNum: 3, quantityDen: 2, quantityText: null })
+
+expect(deserializeIngredientAmount({
+  quantityNum: null,
+  quantityDen: null,
+  quantityText: 'a gosto',
+})).toEqual({ kind: 'text', text: 'a gosto' })
+```
+
+Reject invalid rows such as numerator without denominator or both numeric and text quantity simultaneously.
+
+- [ ] **Step 5: Implement persistence mapping**
+
+`serializeIngredientAmount` and `deserializeIngredientAmount` are the only boundary helpers used by repositories when moving between domain amounts and database/mutation payload columns.
+
+- [ ] **Step 6: Write failing scaling tests**
 
 Cover 0.5x, 1.5x, 2x, target servings and text quantities remaining unchanged.
 
-- [ ] **Step 5: Implement scaling as pure derivation**
+- [ ] **Step 7: Implement scaling as pure derivation**
 
 ```ts
 export function scaleIngredient(item: RecipeIngredient, multiplier: Rational): RecipeIngredient {
@@ -155,11 +184,11 @@ export function scaleIngredient(item: RecipeIngredient, multiplier: Rational): R
 
 Do not persist scaled values merely because the user changes the serving selector.
 
-- [ ] **Step 6: Align persistence columns**
+- [ ] **Step 8: Align persistence columns**
 
-Ensure recipe ingredient schema contains nullable `quantity_num bigint`, `quantity_den bigint`, `quantity_text text` with a check that numeric numerator/denominator are both present together and denominator > 0. Mirror these fields in PowerSync schema.
+Ensure recipe ingredient schema contains nullable `quantity_num bigint`, `quantity_den bigint`, `quantity_text text` with checks that numeric numerator/denominator are both present together, denominator > 0, and numeric and text representations are mutually exclusive. Mirror these fields in PowerSync schema.
 
-- [ ] **Step 7: Run gates and commit**
+- [ ] **Step 9: Run gates and commit**
 
 ```bash
 pnpm vitest run src/features/recipes/domain/amount.test.ts src/features/recipes/domain/scaling.test.ts
@@ -189,7 +218,7 @@ export type ConversionResult =
 
 - [ ] **Step 1: Write failing direct unit conversion tests**
 
-Test mL↔L, tsp↔tbsp↔cup using one documented culinary unit system. Store factors as exact rationals where possible.
+Test mL↔L, tsp↔tbsp↔cup using one documented culinary unit system. Store rational factors exactly where possible.
 
 - [ ] **Step 2: Write failing density conversion tests**
 
@@ -233,11 +262,11 @@ git commit -m "feat: add conservative culinary unit conversions"
 
 - [ ] **Step 1: Write failing recipe repository tests**
 
-Cover create/edit, stable child IDs, reorder without ID replacement, manual `favorite`/`want_to_make`, derived `already_made` excluded from persisted recipe state, and local soft delete.
+Cover create/edit, stable child IDs, reorder without ID replacement, manual `favorite`/`want_to_make`, derived `already_made` excluded from persisted recipe state, exact amount serialization through `serializeIngredientAmount`, and local soft delete.
 
 - [ ] **Step 2: Implement recipe aggregate writes**
 
-Create/edit operations update parent and child entities using stable UUIDs and versioned mutation envelopes. Reordering updates only position fields for existing IDs.
+Create/edit operations update parent and child entities using stable UUIDs and versioned mutation envelopes. Reordering updates only position fields for existing IDs. Ingredient domain amounts always cross the persistence boundary through the Task-1 serializer so mutation payloads remain JSON-safe.
 
 - [ ] **Step 3: Write category tests then implement**
 
