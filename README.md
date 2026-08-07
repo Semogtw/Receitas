@@ -8,6 +8,15 @@ Criar um aplicativo doméstico completo para cadastrar, cozinhar, organizar e pl
 
 Este projeto **não** é uma plataforma multiusuário, não possui grupos públicos e não tem objetivo de distribuição comercial. O produto é desenhado especificamente para um único par de usuários.
 
+## Status
+
+- **Design:** aprovado em 2026-08-07.
+- **Planejamento de implementação:** concluído e auto-revisado.
+- **Implementação:** ainda não iniciada.
+- **Próximo passo:** executar `docs/superpowers/plans/2026-08-07-01-foundation-pwa.md` seguindo o roadmap mestre.
+
+A fonte de verdade do estado do processo é [`docs/superpowers/STATUS.md`](docs/superpowers/STATUS.md).
+
 ## Princípios
 
 - **Exatamente duas pessoas:** o par é a unidade de segurança e compartilhamento.
@@ -19,9 +28,21 @@ Este projeto **não** é uma plataforma multiusuário, não possui grupos públi
 - **Visual culinário, não genérico:** a interface deve lembrar um caderno/livro de receitas moderno, sem estética de dashboard SaaS ou template gerado por IA.
 - **Custo obrigatório zero:** decisões técnicas devem preservar custo recorrente obrigatório de US$ 0 e escolher a melhor alternativa gratuita compatível.
 
-## Documentação
+## Especificação e planos
 
-- [`docs/superpowers/specs/2026-08-07-receitas-design.md`](docs/superpowers/specs/2026-08-07-receitas-design.md) — **especificação final consolidada do design**, aguardando aprovação antes do plano de implementação.
+- [`docs/superpowers/STATUS.md`](docs/superpowers/STATUS.md) — status atual, gates concluídos e próximo passo.
+- [`docs/superpowers/specs/2026-08-07-receitas-design.md`](docs/superpowers/specs/2026-08-07-receitas-design.md) — **especificação final consolidada do design, aprovada pelo usuário em 2026-08-07**.
+- [`docs/superpowers/plans/2026-08-07-receitas-roadmap.md`](docs/superpowers/plans/2026-08-07-receitas-roadmap.md) — roadmap mestre, dependências e contratos entre os sete planos de implementação.
+- [`docs/superpowers/plans/2026-08-07-01-foundation-pwa.md`](docs/superpowers/plans/2026-08-07-01-foundation-pwa.md) — fundação React/Vite/PWA, design tokens, navegação e testes de navegador.
+- [`docs/superpowers/plans/2026-08-07-02-backend-auth-data.md`](docs/superpowers/plans/2026-08-07-02-backend-auth-data.md) — Supabase, schema, RLS, bootstrap, convite, autenticação e Storage privado.
+- [`docs/superpowers/plans/2026-08-07-03-local-first-sync.md`](docs/superpowers/plans/2026-08-07-03-local-first-sync.md) — PowerSync, mutações offline, idempotência, retries e conflitos explícitos.
+- [`docs/superpowers/plans/2026-08-07-04-recipes-cooking-media.md`](docs/superpowers/plans/2026-08-07-04-recipes-cooking-media.md) — receitas, quantidades, conversões, histórico, modo cozinha, timers, fotos e offline.
+- [`docs/superpowers/plans/2026-08-07-05-planning-shopping-search.md`](docs/superpowers/plans/2026-08-07-05-planning-shopping-search.md) — planejador, múltiplas listas de compras, consolidação e busca local.
+- [`docs/superpowers/plans/2026-08-07-06-import-backup-diagnostics.md`](docs/superpowers/plans/2026-08-07-06-import-backup-diagnostics.md) — importação segura, backup/restauração, administração excepcional de conta e diagnósticos.
+- [`docs/superpowers/plans/2026-08-07-07-hardening-deploy-release.md`](docs/superpowers/plans/2026-08-07-07-hardening-deploy-release.md) — hardening, segurança, deploy gratuito, runbooks e release.
+
+## Documentação normativa
+
 - [`docs/PRODUCT.md`](docs/PRODUCT.md) — escopo funcional e comportamento do produto.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — arquitetura local-first, sincronização, segurança e backend.
 - [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) — entidades, relacionamentos e regras de dados.
@@ -42,6 +63,6 @@ Este projeto **não** é uma plataforma multiusuário, não possui grupos públi
 - [`docs/TESTING.md`](docs/TESTING.md) — estratégia de testes com Vitest, Testing Library, Playwright, offline, segurança e QA.
 - [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md) — regras de continuidade do desenvolvimento, autonomia técnica de custo zero, uso de ferramentas/plugins e a decisão explícita de **não usar ImageGen no fluxo visual sem nova autorização do usuário**.
 
-A documentação é atualizada conforme as decisões de produto são aprovadas, para evitar depender apenas do histórico da conversa.
+A documentação é atualizada conforme as decisões de produto e implementação são aprovadas/verificadas, para evitar depender apenas do histórico da conversa.
 
-Sessões futuras de desenvolvimento devem ler `docs/DEVELOPMENT_WORKFLOW.md`, `docs/TOOLS_AND_PLUGINS.md` e as especificações relevantes antes de alterar o produto. Tarefas de frontend devem ler também `docs/FRONTEND.md` e `docs/UX.md`.
+Sessões futuras devem ler primeiro `docs/superpowers/STATUS.md`, `docs/DEVELOPMENT_WORKFLOW.md`, `docs/TOOLS_AND_PLUGINS.md`, o roadmap e o plano ativo. Tarefas de frontend devem ler também `docs/FRONTEND.md` e `docs/UX.md`.
