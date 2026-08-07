@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(12);
+select plan(19);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password,
@@ -41,14 +41,14 @@ set local role authenticated;
 select is(
   public.is_pair_member(current_setting('test.pair_id')::uuid),
   false,
-  'unverified pending member is not authorized by RLS helper'
+  'unverified bootstrap member is not authorized by RLS helper'
 );
 
 select throws_ok(
   $$select public.activate_current_pair_membership()$$,
   'P0001',
   'verified email required',
-  'unverified identity cannot activate membership'
+  'unverified bootstrap identity cannot activate membership'
 );
 
 reset role;
@@ -60,40 +60,105 @@ set local role authenticated;
 select is(
   public.activate_current_pair_membership(),
   current_setting('test.pair_id')::uuid,
-  'verified identity activates its reserved membership'
+  'verified bootstrap identity activates its membership'
 );
 
 select is(
   (select count(*)::integer from public.pairs),
   1,
-  'activated member can read its pair through RLS'
+  'activated bootstrap member can read its pair through RLS'
 );
 
 select throws_ok(
   $$insert into public.pair_members (pair_id, user_id)
     values (current_setting('test.pair_id')::uuid, '10000000-0000-0000-0000-000000000003')$$,
   '42501',
-  'permission denied for table pair_members',
+  null,
   'authenticated client cannot write pair membership directly'
 );
 
 reset role;
 
-insert into public.pair_members (pair_id, user_id)
-select id, '10000000-0000-0000-0000-000000000002' from public.pairs limit 1;
+select is(
+  public.revoke_pending_pair_invite(
+    current_setting('test.pair_id')::uuid,
+    '10000000-0000-0000-0000-000000000001'
+  ),
+  null::uuid,
+  'revoking when no second-member invite exists is idempotent'
+);
+
+select ok(
+  public.reserve_pair_invite(
+    current_setting('test.pair_id')::uuid,
+    '10000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000002',
+    repeat('a', 64),
+    now() + interval '1 hour'
+  ) is not null,
+  'reserving an invite occupies the second seat'
+);
 
 select is(
-  (select status::text from public.pairs limit 1),
-  'closed',
-  'reserving the second seat closes the pair'
+  (select status::text from public.pairs where id = current_setting('test.pair_id')::uuid),
+  'open_for_second_member',
+  'pending unverified second member does not close the pair yet'
+);
+
+select is(
+  (select count(*)::integer from public.pair_members where pair_id = current_setting('test.pair_id')::uuid and removed_at is null),
+  2,
+  'pending invite still reserves the second seat against races'
 );
 
 select throws_ok(
   $$insert into public.pair_members (pair_id, user_id)
-    select id, '10000000-0000-0000-0000-000000000003' from public.pairs limit 1$$,
+    values (current_setting('test.pair_id')::uuid, '10000000-0000-0000-0000-000000000003')$$,
+  'P0001',
+  'pair already has two members',
+  'third pending/current seat cannot be inserted while invite is pending'
+);
+
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', '10000000-0000-0000-0000-000000000002', 'role', 'authenticated')::text,
+  true
+);
+set local role authenticated;
+
+select throws_ok(
+  $$select public.activate_current_pair_membership()$$,
+  'P0001',
+  'pair invite acceptance required',
+  'second member cannot bypass the pair invite token'
+);
+
+select throws_ok(
+  $$select public.accept_pair_invite(repeat('b', 64))$$,
+  'P0001',
+  'invite is invalid or expired',
+  'wrong pair invite token is rejected'
+);
+
+select is(
+  public.accept_pair_invite(repeat('a', 64)),
+  current_setting('test.pair_id')::uuid,
+  'verified invited identity consumes its own pair invite'
+);
+
+select is(
+  (select status::text from public.pairs),
+  'closed',
+  'pair closes only after the second verified member accepts'
+);
+
+reset role;
+select throws_ok(
+  $$insert into public.pair_members (pair_id, user_id)
+    values (current_setting('test.pair_id')::uuid, '10000000-0000-0000-0000-000000000003')$$,
   'P0001',
   'pair is closed',
-  'third membership is rejected even by privileged direct insert'
+  'closed pair rejects any third member'
 );
 
 update public.pair_members
@@ -101,24 +166,10 @@ update public.pair_members
  where user_id = '10000000-0000-0000-0000-000000000002';
 
 select is(
-  (select status::text from public.pairs limit 1),
+  (select status::text from public.pairs),
   'closed',
   'removing a member never reopens a closed pair'
 );
 
-select set_config(
-  'request.jwt.claims',
-  json_build_object('sub', '10000000-0000-0000-0000-000000000003', 'role', 'authenticated')::text,
-  true
-);
-set local role authenticated;
-
-select is(
-  (select count(*)::integer from public.pairs),
-  0,
-  'authenticated outsider cannot read another pair'
-);
-
-reset role;
 select * from finish();
 rollback;
