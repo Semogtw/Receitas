@@ -17,7 +17,7 @@ enable_signup = false
 double_confirm_changes = true
 enable_confirmations = true
 max_frequency = "1m"
-otp_expiry = 3600
+otp_expiry = 86400
 
 [auth.rate_limit]
 email_sent = 2
@@ -28,6 +28,11 @@ token_refresh = 150
 [storage]
 enabled = true
 file_size_limit = "20MiB"
+
+[storage.buckets.recipe_media]
+public = false
+file_size_limit = "20MiB"
+allowed_mime_types = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]
 
 [inbucket]
 enabled = true
