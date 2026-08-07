@@ -11,10 +11,13 @@ A primeira versão deve ser tratada como o **produto completo para uso pessoal**
 ## 2. Formação do par e autenticação
 
 - Autenticação por **e-mail e senha**.
-- A primeira pessoa cria o par.
+- As duas contas devem possuir **endereço de e-mail verificado** antes de serem consideradas plenamente configuradas.
+- A primeira pessoa cria o par pelo bootstrap único e protegido.
 - O sistema gera um **convite de uso único** para a segunda pessoa.
 - Após o segundo membro entrar, o par fica fechado para novas adesões.
 - Os dois membros possuem acesso funcional equivalente aos dados compartilhados.
+- Cada uma das duas contas existentes pode redefinir a própria senha por e-mail sem criar nova identidade nem reabrir cadastro.
+- Não existe cadastro público.
 
 ## 3. Receitas
 
@@ -187,6 +190,8 @@ Os **períodos de refeição são personalizáveis** pelo par, em vez de uma enu
 
 O planejador deve poder alimentar a lista de compras com as receitas e quantidades planejadas para um período selecionado.
 
+O planejador é **somente visual**: não envia lembretes nem notificações de refeições planejadas. Alertas do sistema ficam restritos a recursos que realmente exigem temporização, como timers do modo cozinha.
+
 ## 10. Importação por URL
 
 O usuário pode colar a URL de uma receita e solicitar preenchimento automático de:
@@ -201,6 +206,8 @@ A importação sempre termina em **revisão manual antes de salvar**. O parser �
 
 Falhas parciais devem preservar o que foi extraído corretamente e permitir completar/corrigir manualmente.
 
+A estratégia detalhada de importação, incluindo fallback por texto, está em `docs/IMPORTING.md`.
+
 ## 11. Conflitos de edição
 
 O produto **não aceita sobrescrita silenciosa do tipo last-write-wins** como experiência final para conflitos reais.
@@ -208,11 +215,14 @@ O produto **não aceita sobrescrita silenciosa do tipo last-write-wins** como ex
 Quando os dois usuários alterarem a mesma entidade a partir de bases incompatíveis:
 
 - ambas as versões são preservadas;
-- o conflito é registrado explicitamente;
+- auto-merge só acontece quando for inequivocamente seguro;
+- o conflito é registrado explicitamente quando houver ambiguidade;
 - a versão estável permanece acessível;
 - a interface permite comparar versões;
 - o usuário pode escolher uma versão ou mesclar campo a campo;
 - a versão descartada continua registrada no histórico do conflito.
+
+A política detalhada está em `docs/SYNC.md`.
 
 ## 12. Lixeira
 
