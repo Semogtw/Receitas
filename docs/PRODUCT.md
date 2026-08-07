@@ -265,6 +265,8 @@ Formato esperado: arquivo `.zip` com manifesto e dados estruturados em formato a
 
 O aplicativo também deve restaurar/importar um backup compatível.
 
+A restauração suporta os modos **Mesclar** e **Substituir tudo** conforme `docs/BACKUP_RESTORE.md`; a substituição exige backup de segurança automático do estado atual antes de qualquer alteração destrutiva.
+
 ## 14. Modo cozinha
 
 O produto inclui um **modo cozinha** focado em consulta durante o preparo.
@@ -290,6 +292,19 @@ Características:
 - O app **não deve prometer execução confiável em segundo plano quando o navegador ou iOS não oferecerem essa garantia**.
 - Quando houver limitação de background, a interface deve informar de maneira clara que o aviso pode depender do app permanecer ativo/aberto, em vez de fingir confiabilidade inexistente.
 - Timers são auxiliares de preparo e não alteram a definição canônica da receita.
+
+### 14.2 Ciclo de vida do preparo em andamento
+
+- Iniciar ou simplesmente abrir o modo cozinha **não cria um registro no histórico**.
+- Progresso de etapas, marcações e timers permanecem em estado local temporário enquanto o preparo estiver em andamento.
+- Sair do modo cozinha não significa abandonar: o usuário pode voltar e **retomar** o preparo quando o estado local continuar disponível.
+- **“Finalizar preparo”** é a ação que cria o `cooking_session` persistente e faz aquela execução passar a contar no histórico.
+- Após finalizar, o app abre a etapa pós-preparo para permitir fotos, avaliações individuais, comentários individuais e observação compartilhada.
+- Deve existir **“Encerrar sem registrar”** para abandonar a execução sem criar histórico.
+- Um preparo abandonado não altera o estado derivado **“Já fizemos”**.
+- Falha de rede não impede a finalização local; o registro pode sincronizar posteriormente.
+
+A especificação detalhada desse ciclo está em `docs/COOKING_MODE.md`.
 
 ## 15. Fora de escopo por decisão de produto
 
