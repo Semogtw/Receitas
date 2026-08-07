@@ -40,7 +40,8 @@ src/features/conflicts/ConflictCenter.tsx
 src/features/conflicts/ConflictDetail.tsx
 src/features/conflicts/conflict-resolution.ts
 supabase/functions/sync-mutation/index.ts
-supabase/functions/sync-mutation/handlers/*.ts
+supabase/functions/sync-mutation/entity-policies.ts
+supabase/functions/sync-mutation/apply-mutation.ts
 supabase/functions/sync-mutation/index.test.ts
 supabase/migrations/0006_sync_mutations.sql
 supabase/tests/sync_mutations.sql
@@ -334,14 +335,46 @@ git commit -m "feat: connect PowerSync with Supabase sessions"
 **Files:**
 - Create: `supabase/migrations/0006_sync_mutations.sql`
 - Create: `supabase/functions/sync-mutation/index.ts`
-- Create: `supabase/functions/sync-mutation/handlers/types.ts`
-- Create: `supabase/functions/sync-mutation/handlers/recipe.ts`
-- Create: `supabase/functions/sync-mutation/handlers/generic-child.ts`
+- Create: `supabase/functions/sync-mutation/entity-policies.ts`
+- Create: `supabase/functions/sync-mutation/apply-mutation.ts`
 - Create: `supabase/functions/sync-mutation/index.test.ts`
 - Create: `supabase/tests/sync_mutations.sql`
 
 **Interfaces:**
 - Produces `POST sync-mutation` accepting one `MutationEnvelope` and returning one `MutationApplyResult`.
+
+```ts
+export type SyncEntityType =
+  | 'recipes'
+  | 'recipe_ingredients'
+  | 'recipe_steps'
+  | 'categories'
+  | 'recipe_categories'
+  | 'recipe_photos'
+  | 'cooking_sessions'
+  | 'cooking_session_ratings'
+  | 'cooking_session_photos'
+  | 'meal_periods'
+  | 'meal_plan_entries'
+  | 'shopping_lists'
+  | 'shopping_items'
+  | 'ingredient_conversion_profiles'
+  | 'imports'
+
+export interface MutationEntityPolicy {
+  table: SyncEntityType
+  softDelete: boolean
+  mergeMode: 'fieldwise' | 'independent_child'
+}
+
+export type EntityPolicyMap = Record<SyncEntityType, MutationEntityPolicy>
+
+export function applyMutationWithPolicy(
+  userId: string,
+  envelope: MutationEnvelope<Record<string, unknown>>,
+  policy: MutationEntityPolicy,
+): Promise<MutationApplyResult>
+```
 
 - [ ] **Step 1: Write failing idempotency/revision tests**
 
@@ -352,7 +385,7 @@ Cover:
 - stale base with provably independent fields can merge;
 - delete vs edit creates conflict;
 - caller cannot mutate another pair;
-- unknown `entityType` is rejected rather than interpolated into SQL.
+- unknown `entityType` is rejected before any SQL identifier is selected.
 
 - [ ] **Step 2: Add applied-mutation ledger**
 
@@ -369,34 +402,53 @@ create table public.applied_mutations (
 );
 ```
 
-RLS should not expose this as a normal editable client table. Access occurs through privileged function logic after verifying caller identity/pair.
+RLS does not expose this as a normal editable client table. Access occurs through privileged function logic after verifying caller identity/pair.
 
-- [ ] **Step 3: Implement explicit handler allowlist**
+- [ ] **Step 3: Implement the complete entity policy allowlist**
+
+Create exactly this exhaustive map in `entity-policies.ts` and make TypeScript fail compilation if a `SyncEntityType` is omitted:
 
 ```ts
-const handlers: Record<string, MutationHandler> = {
-  recipes: applyRecipeMutation,
-  recipe_ingredients: applyGenericChildMutation,
-  recipe_steps: applyGenericChildMutation,
-  // enumerate every supported syncable entity deliberately
+export const ENTITY_POLICIES: EntityPolicyMap = {
+  recipes: { table: 'recipes', softDelete: true, mergeMode: 'fieldwise' },
+  recipe_ingredients: { table: 'recipe_ingredients', softDelete: true, mergeMode: 'fieldwise' },
+  recipe_steps: { table: 'recipe_steps', softDelete: true, mergeMode: 'fieldwise' },
+  categories: { table: 'categories', softDelete: true, mergeMode: 'fieldwise' },
+  recipe_categories: { table: 'recipe_categories', softDelete: true, mergeMode: 'independent_child' },
+  recipe_photos: { table: 'recipe_photos', softDelete: true, mergeMode: 'independent_child' },
+  cooking_sessions: { table: 'cooking_sessions', softDelete: true, mergeMode: 'fieldwise' },
+  cooking_session_ratings: { table: 'cooking_session_ratings', softDelete: true, mergeMode: 'independent_child' },
+  cooking_session_photos: { table: 'cooking_session_photos', softDelete: true, mergeMode: 'independent_child' },
+  meal_periods: { table: 'meal_periods', softDelete: true, mergeMode: 'fieldwise' },
+  meal_plan_entries: { table: 'meal_plan_entries', softDelete: true, mergeMode: 'fieldwise' },
+  shopping_lists: { table: 'shopping_lists', softDelete: true, mergeMode: 'fieldwise' },
+  shopping_items: { table: 'shopping_items', softDelete: true, mergeMode: 'fieldwise' },
+  ingredient_conversion_profiles: { table: 'ingredient_conversion_profiles', softDelete: true, mergeMode: 'fieldwise' },
+  imports: { table: 'imports', softDelete: true, mergeMode: 'fieldwise' },
 }
 ```
 
-Before completing this task, replace the illustrative three-entry object above with an explicit entry for every syncable domain entity defined in `src/data/schema.ts`. Never derive SQL table names from untrusted `entityType` input.
+`pairs`, `pair_members`, `pair_invites`, `conflicts` and `applied_mutations` are intentionally absent: normal clients never mutate those through this dispatcher.
 
-- [ ] **Step 4: Implement deterministic three-way comparison**
+- [ ] **Step 4: Implement safe table dispatch without interpolating untrusted entity names**
 
-For updates, compare `basePayload`, current remote payload and `localPayload` field by field. Auto-merge only when changed-field sets do not overlap and structural invariants remain valid. Ordered-list reorder changes are treated as overlapping unless a dedicated handler proves compatibility.
+First parse `entityType` by own-property lookup against `ENTITY_POLICIES`. Then dispatch to a prepared/static query implementation selected by `policy.table`. Do not use `from(envelope.entityType)` or string-built SQL. `applyMutationWithPolicy` contains an exhaustive `switch(policy.table)` (or an equivalently typed map of static query functions) so each database table name is a literal present in source code.
 
-- [ ] **Step 5: Create conflicts before acknowledging incompatible mutation**
+- [ ] **Step 5: Implement deterministic three-way comparison**
 
-Persist full safe domain snapshots (no secrets) to `conflicts`. Return `{ status: 'conflict', conflictId }`. The canonical row remains readable and the local version survives in the conflict record.
+For updates, compare `basePayload`, current remote payload and `localPayload` field by field. Auto-merge only when changed-field sets do not overlap and structural invariants remain valid. Ordered-list reorder changes are treated as overlapping unless a dedicated policy proves compatibility.
 
-- [ ] **Step 6: Run SQL/function tests**
+`independent_child` means independent child rows can coexist; it does **not** mean two incompatible edits to the same child row are silently merged.
 
-Expected: all idempotency, cross-pair and conflict cases PASS.
+- [ ] **Step 6: Create conflicts before acknowledging incompatible mutation**
 
-- [ ] **Step 7: Commit**
+Persist safe domain snapshots (no secrets) to `conflicts`. Return `{ status: 'conflict', conflictId }`. The canonical row remains readable and the local version survives in the conflict record.
+
+- [ ] **Step 7: Run SQL/function tests**
+
+Expected: all idempotency, cross-pair, exhaustive-policy and conflict cases PASS.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add supabase/migrations/0006_sync_mutations.sql supabase/functions/sync-mutation supabase/tests/sync_mutations.sql
