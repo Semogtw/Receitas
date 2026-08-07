@@ -6,15 +6,19 @@ export function PasswordRecoveryScreen() {
   const auth = useAuth()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   async function submit(event: FormEvent) {
     event.preventDefault()
     setSubmitting(true)
+    setError(null)
     try {
       await auth.requestPasswordReset(email)
-    } finally {
       setSent(true)
+    } catch {
+      setError('Não foi possível solicitar a redefinição agora. Verifique a conexão e tente novamente.')
+    } finally {
       setSubmitting(false)
     }
   }
@@ -26,6 +30,7 @@ export function PasswordRecoveryScreen() {
       {sent ? <p role="status">Verifique seu e-mail. Por segurança, esta mensagem é a mesma mesmo quando o endereço não possui conta.</p> : (
         <form className="auth-form" onSubmit={submit}>
           <label>E-mail<input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          {error ? <p className="auth-error" role="alert">{error}</p> : null}
           <button className="button button--primary" disabled={submitting}>{submitting ? 'Enviando…' : 'Enviar link'}</button>
         </form>
       )}
