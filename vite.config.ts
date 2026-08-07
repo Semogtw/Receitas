@@ -3,6 +3,12 @@ import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  optimizeDeps: {
+    exclude: ['@powersync/web'],
+  },
+  worker: {
+    format: 'es',
+  },
   plugins: [
     react(),
     VitePWA({
@@ -26,7 +32,7 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: '/index.html',
-        globPatterns: ['**/*.{js,css,html,png,svg}'],
+        globPatterns: ['**/*.{js,mjs,css,html,png,svg,wasm}'],
         runtimeCaching: [],
       },
     }),
