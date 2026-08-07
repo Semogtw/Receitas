@@ -53,7 +53,11 @@ Princípios:
 - o usuário pode continuar trabalhando enquanto a sincronização está pendente;
 - operações devem ser idempotentes sempre que possível;
 - falhas transitórias de rede geram retry, não perda de dados;
-- estados de sincronização importantes devem ser observáveis pela interface.
+- estados de sincronização importantes devem ser observáveis pela interface;
+- entidades que precisam ser criadas offline recebem IDs estáveis antes de chegar ao servidor;
+- cada mutação editável deve carregar informação suficiente sobre a versão/base conhecida sobre a qual foi criada.
+
+A política detalhada de sincronização, retry, versionamento e conflitos está em [`SYNC.md`](./SYNC.md) e é normativa para a implementação.
 
 ## 5. Conflitos
 
@@ -61,7 +65,15 @@ A política de produto exige preservação explícita de conflitos.
 
 Não depender de last-write-wins para alterações concorrentes semanticamente incompatíveis.
 
-Entidades editáveis devem carregar metadados suficientes para detectar que uma mutação foi produzida sobre uma base desatualizada. Quando isso ocorrer:
+Regra central:
+
+> **Auto-merge somente quando a combinação puder ser demonstrada como segura. Havendo ambiguidade semântica, preservar todas as versões e criar um conflito explícito.**
+
+Entidades editáveis devem carregar metadados suficientes para detectar que uma mutação foi produzida sobre uma base desatualizada.
+
+Quando a alteração concorrente atingir campos ou entidades semanticamente independentes, o sistema pode mesclar automaticamente desde que a união seja determinística e não viole invariantes. Exemplos incluem avaliações pessoais distintas de um mesmo preparo e alterações em campos realmente independentes da receita.
+
+Quando houver sobreposição ou ambiguidade — como duas alterações diferentes no mesmo campo, no mesmo ingrediente/etapa, exclusão concorrendo com edição ou reordenações incompatíveis — o sistema deve:
 
 1. preservar a versão local;
 2. preservar a versão remota concorrente;
@@ -70,7 +82,9 @@ Entidades editáveis devem carregar metadados suficientes para detectar que uma 
 5. permitir resolução por escolha ou mesclagem campo a campo;
 6. registrar a resolução sem apagar imediatamente as versões anteriores.
 
-A implementação detalhada da estratégia de versionamento será congelada no plano técnico antes do código, mas a propriedade acima é obrigatória.
+Conflitos não bloqueiam o restante do aplicativo e podem ser resolvidos posteriormente.
+
+A especificação completa está em [`SYNC.md`](./SYNC.md).
 
 ## 6. Mídia local-first
 
@@ -173,6 +187,8 @@ usuário revisa antes de salvar
 
 A função deve aplicar proteções contra abuso de fetch do lado servidor, incluindo validação rigorosa de URL e prevenção de SSRF.
 
+A especificação detalhada do importador está em [`IMPORTING.md`](./IMPORTING.md).
+
 ## 11. Backup e restauração
 
 Backups devem usar formato portável e independente do banco interno sempre que razoável.
@@ -200,6 +216,8 @@ Entidades recuperáveis usam soft delete, normalmente via `deleted_at` ou mecani
 
 A sincronização precisa propagar exclusões lógicas como estado, em vez de interpretar ausência remota como autorização para destruir cópias locais imediatamente.
 
+Exclusão concorrendo com edição da mesma entidade deve ser tratada como conflito, não como vitória automática da exclusão ou da edição.
+
 ## 13. Estado de conectividade
 
 A experiência deve diferenciar pelo menos:
@@ -218,5 +236,6 @@ O aplicativo não deve transformar conectividade em um banner permanente ou intr
 - Sem banco remoto como dependência para toda renderização.
 - Sem sincronização própria improvisada quando PowerSync cobrir o caso com confiabilidade.
 - Sem sobrescrita silenciosa de conflitos reais.
+- Sem auto-merge quando for necessário interpretar intenção humana.
 - Sem uploads públicos por padrão.
 - Sem arquitetura multi-tenant genérica para vários pares.
