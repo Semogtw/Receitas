@@ -72,17 +72,17 @@ All shared domain rows either carry `pair_id` directly or are reachable through 
 
 ---
 
-### Task 1: Initialize Supabase project files and typed client contract
+### Task 1: Initialize Supabase project files and browser client
 
 **Files:**
 - Create: `supabase/config.toml`
 - Create: `src/lib/supabase/client.ts`
-- Create: `src/lib/supabase/types.ts`
 - Create: `src/lib/supabase/client.test.ts`
 - Modify: `package.json`
 
 **Interfaces:**
-- Produces: `getSupabaseClient(): SupabaseClient<Database>`.
+- Produces: `getSupabaseClient(): SupabaseClient` using only public browser configuration.
+- Task 8 later replaces the unparameterized client type with the generated `Database` type after migrations exist.
 
 - [ ] **Step 1: Verify current Supabase JS and CLI APIs with @Context7**
 
@@ -100,25 +100,24 @@ Use Supabase CLI through a local dev dependency or documented executable appropr
 
 Test that `getSupabaseClient` consumes `readPublicEnv()` and never accepts or exposes a service-role key.
 
-- [ ] **Step 4: Implement the client**
+- [ ] **Step 4: Implement the browser client without inventing schema types**
 
 ```ts
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { readPublicEnv } from '../env'
-import type { Database } from './types'
 
-let client: ReturnType<typeof createClient<Database>> | undefined
+let client: SupabaseClient | undefined
 
-export function getSupabaseClient() {
+export function getSupabaseClient(): SupabaseClient {
   if (!client) {
     const env = readPublicEnv()
-    client = createClient<Database>(env.supabaseUrl, env.supabaseAnonKey)
+    client = createClient(env.supabaseUrl, env.supabaseAnonKey)
   }
   return client
 }
 ```
 
-Start `Database` as generated/checked-in types after migrations exist; until then create only the minimal compile-safe placeholder shape required by the client and replace it in Task 7 with generated types. Do not fake domain fields.
+Do not create handwritten domain database types before migrations. Task 8 generates `src/lib/supabase/types.ts` from the real schema and then parameterizes this client.
 
 - [ ] **Step 5: Run tests/typecheck**
 
@@ -132,8 +131,8 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add package.json pnpm-lock.yaml supabase/config.toml src/lib/supabase
-git commit -m "chore: initialize Supabase client and local config"
+git add package.json pnpm-lock.yaml supabase/config.toml src/lib/supabase/client*
+git commit -m "chore: initialize Supabase browser client"
 ```
 
 ---
@@ -267,6 +266,10 @@ Create:
 - `imports`
 
 Every syncable table uses UUID primary keys supplied by the client. Use `revision bigint not null default 0`, timestamps and `deleted_at` where soft delete applies.
+
+For recipe ingredients, reserve exact quantity columns that plan 04 consumes: nullable integer numerator/denominator plus nullable free-text quantity, with a check that numerator/denominator appear together and denominator is positive. Steps include nullable `duration_seconds integer`.
+
+For ratings, enforce score 0–10 and half-point increments at the database boundary in addition to application validation.
 
 - [ ] **Step 3: Implement planner/shopping schema**
 
@@ -525,18 +528,30 @@ git commit -m "feat: protect private recipe media storage"
 ### Task 8: Generate typed database contracts and perform security review
 
 **Files:**
-- Replace: `src/lib/supabase/types.ts`
+- Create: `src/lib/supabase/types.ts` from the real migration schema
+- Modify: `src/lib/supabase/client.ts`
 - Modify: `docs/AUTH_SECURITY.md` only for verified implementation details
 - Modify: `docs/DATA_MODEL.md` only if implementation exposed a necessary exact constraint
 
 **Interfaces:**
-- Produces stable generated `Database` types consumed by plans 03–06.
+- Produces stable generated `Database` types consumed by plans 03–06 and upgrades `getSupabaseClient()` to `SupabaseClient<Database>`.
 
 - [ ] **Step 1: Generate Supabase TypeScript types from the implemented schema**
 
 Use the current CLI command confirmed via @Context7. Commit generated types; do not hand-maintain a second incompatible schema type model.
 
-- [ ] **Step 2: Run full backend gates**
+- [ ] **Step 2: Parameterize the browser client with generated types**
+
+```ts
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from './types'
+
+let client: SupabaseClient<Database> | undefined
+```
+
+Keep the same singleton/environment behavior from Task 1.
+
+- [ ] **Step 3: Run full backend gates**
 
 Run all available:
 
@@ -549,7 +564,7 @@ pnpm test:run
 
 Expected: PASS or environmental blockers explicitly documented.
 
-- [ ] **Step 3: Run Codex Security on auth/RLS/functions scope**
+- [ ] **Step 4: Run Codex Security on auth/RLS/functions scope**
 
 Scope at minimum:
 - `supabase/migrations/`
@@ -559,17 +574,17 @@ Scope at minimum:
 
 Fix all validated high/critical findings before completing the plan. Medium findings that affect the approved security invariants must also be fixed.
 
-- [ ] **Step 4: Verify frontend bundle contains no privileged secret**
+- [ ] **Step 5: Verify frontend bundle contains no privileged secret**
 
 Build and search `dist/` for bootstrap/service-role variable names and any test secrets. Expected: none.
 
-- [ ] **Step 5: Commit generated types/security fixes**
+- [ ] **Step 6: Commit generated types/security fixes**
 
 ```bash
-git add src/lib/supabase/types.ts supabase src/features/auth docs/AUTH_SECURITY.md docs/DATA_MODEL.md
+git add src/lib/supabase supabase src/features/auth docs/AUTH_SECURITY.md docs/DATA_MODEL.md
 git commit -m "test: harden auth RLS and backend contracts"
 ```
 
-- [ ] **Step 6: Mark plan complete**
+- [ ] **Step 7: Mark plan complete**
 
 Do not start PowerSync integration until schema, auth state and RLS contracts are stable enough for plan 03 to consume.
