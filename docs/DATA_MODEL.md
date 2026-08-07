@@ -12,6 +12,7 @@
 - Exclusões importantes são recuperáveis.
 - Conflitos são entidades explícitas, não apenas logs descartáveis.
 - Fotos da receita e fotos de preparos possuem ciclos de vida distintos.
+- Avaliações de preparos pertencem individualmente a cada membro e não são armazenadas como uma única nota compartilhada.
 
 ## 2. Entidades principais
 
@@ -166,11 +167,44 @@ Campos conceituais:
 - usuário que registrou;
 - data/hora;
 - porções efetivamente preparadas;
-- nota/avaliação;
-- observações;
+- observações compartilhadas do preparo;
 - referência de versão;
 - snapshot suficiente para preservar o estado relevante da receita usada naquele preparo;
 - `deleted_at`.
+
+A entidade do preparo **não armazena uma única nota compartilhada**.
+
+### `cooking_session_ratings`
+
+Representa a avaliação individual de um membro para um preparo específico.
+
+Campos conceituais:
+
+- `id`;
+- `cooking_session_id`;
+- `pair_id`;
+- `user_id`;
+- `score`, restrito ao intervalo de 0 a 10 em incrementos de 0,5;
+- comentário individual opcional, caso a implementação decida separar comentários pessoais das observações compartilhadas;
+- timestamps de criação/edição;
+- metadados de versionamento e sincronização;
+- `deleted_at` quando necessário para restauração/auditoria.
+
+Invariantes:
+
+- existe no máximo **uma avaliação ativa por (`cooking_session_id`, `user_id`)**;
+- apenas membros do mesmo `pair_id` do preparo podem avaliá-lo;
+- editar a própria avaliação não altera a avaliação do outro membro;
+- um preparo pode existir sem avaliações;
+- a ausência de avaliação de um membro não invalida a avaliação do outro;
+- médias são valores derivados e não precisam ser persistidas como fonte de verdade.
+
+Agregados possíveis derivados em leitura:
+
+- média do preparo;
+- média histórica do par para a receita;
+- média histórica por membro;
+- evolução das notas por preparo.
 
 ### Snapshot da receita
 
