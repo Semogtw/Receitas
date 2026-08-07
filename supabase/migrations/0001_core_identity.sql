@@ -46,6 +46,7 @@ create table public.pair_invites (
   pair_id uuid not null references public.pairs(id) on delete cascade,
   token_hash text not null unique check (token_hash ~ '^[0-9a-f]{64}$'),
   created_by uuid not null references auth.users(id) on delete restrict,
+  invited_user_id uuid references auth.users(id) on delete set null,
   expires_at timestamptz not null,
   consumed_at timestamptz,
   invalidated_at timestamptz,
@@ -57,6 +58,9 @@ create table public.pair_invites (
 create unique index pair_invites_one_unresolved_per_pair_idx
   on public.pair_invites(pair_id)
   where consumed_at is null and invalidated_at is null;
+
+alter table public.pair_members
+  add column invite_id uuid unique references public.pair_invites(id) on delete set null;
 
 create or replace function private.touch_updated_at()
 returns trigger
@@ -115,13 +119,9 @@ begin
     raise exception 'pair already has two members' using errcode = 'P0001';
   end if;
 
-  if seat_count = 0 then
+  if seat_count = 0 and pair_state = 'initializing' then
     update public.pairs
        set status = 'open_for_second_member'
-     where id = new.pair_id;
-  elsif seat_count = 1 then
-    update public.pairs
-       set status = 'closed'
      where id = new.pair_id;
   end if;
 
@@ -132,6 +132,49 @@ $$;
 create trigger pair_members_enforce_capacity
 before insert or update of removed_at on public.pair_members
 for each row execute function private.enforce_pair_member_capacity();
+
+create or replace function private.close_pair_after_second_activation()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  active_count integer;
+begin
+  if new.removed_at is not null or new.activated_at is null then
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE' and old.activated_at is not null then
+    return new;
+  end if;
+
+  perform 1 from public.pairs p where p.id = new.pair_id for update;
+
+  select count(*)::integer
+    into active_count
+    from public.pair_members pm
+   where pm.pair_id = new.pair_id
+     and pm.activated_at is not null
+     and pm.removed_at is null;
+
+  if active_count >= 2 then
+    update public.pairs set status = 'closed' where id = new.pair_id;
+  elsif active_count = 1 then
+    update public.pairs
+       set status = 'open_for_second_member'
+     where id = new.pair_id
+       and status = 'initializing';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger pair_members_close_after_activation
+after insert or update of activated_at on public.pair_members
+for each row execute function private.close_pair_after_second_activation();
 
 create or replace function public.is_pair_member(target_pair_id uuid)
 returns boolean
@@ -159,6 +202,7 @@ as $$
 declare
   current_user_id uuid := auth.uid();
   current_pair_id uuid;
+  current_invite_id uuid;
   verified_at timestamptz;
 begin
   if current_user_id is null then
@@ -174,8 +218,8 @@ begin
     raise exception 'verified email required' using errcode = 'P0001';
   end if;
 
-  select pm.pair_id
-    into current_pair_id
+  select pm.pair_id, pm.invite_id
+    into current_pair_id, current_invite_id
     from public.pair_members pm
    where pm.user_id = current_user_id
      and pm.removed_at is null
@@ -183,6 +227,10 @@ begin
 
   if current_pair_id is null then
     raise exception 'pair membership not found' using errcode = 'P0001';
+  end if;
+
+  if current_invite_id is not null then
+    raise exception 'pair invite acceptance required' using errcode = 'P0001';
   end if;
 
   update public.pair_members
@@ -231,9 +279,67 @@ begin
 end;
 $$;
 
-create or replace function public.create_pair_invite(
+create or replace function public.revoke_pending_pair_invite(
+  target_pair_id uuid,
+  creator_user_id uuid
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  pair_state public.pair_status;
+  previous_invite_id uuid;
+  previous_user_id uuid;
+begin
+  select p.status into pair_state
+    from public.pairs p
+   where p.id = target_pair_id
+   for update;
+
+  if pair_state is distinct from 'open_for_second_member'::public.pair_status then
+    raise exception 'pair is not accepting its second member' using errcode = 'P0001';
+  end if;
+
+  if not exists (
+    select 1
+      from public.pair_members pm
+     where pm.pair_id = target_pair_id
+       and pm.user_id = creator_user_id
+       and pm.activated_at is not null
+       and pm.removed_at is null
+  ) then
+    raise exception 'active pair member required' using errcode = '42501';
+  end if;
+
+  select pi.id, pi.invited_user_id
+    into previous_invite_id, previous_user_id
+    from public.pair_invites pi
+   where pi.pair_id = target_pair_id
+     and pi.consumed_at is null
+     and pi.invalidated_at is null
+   for update;
+
+  if previous_invite_id is not null then
+    delete from public.pair_members pm
+     where pm.pair_id = target_pair_id
+       and pm.invite_id = previous_invite_id
+       and pm.activated_at is null;
+
+    update public.pair_invites
+       set invalidated_at = now()
+     where id = previous_invite_id;
+  end if;
+
+  return previous_user_id;
+end;
+$$;
+
+create or replace function public.reserve_pair_invite(
   target_pair_id uuid,
   creator_user_id uuid,
+  invited_user_id uuid,
   invite_token_hash text,
   invite_expires_at timestamptz
 )
@@ -247,6 +353,14 @@ declare
   pair_state public.pair_status;
   current_count integer;
 begin
+  if creator_user_id = invited_user_id then
+    raise exception 'cannot invite the current member' using errcode = '22023';
+  end if;
+
+  if not exists (select 1 from auth.users u where u.id = invited_user_id) then
+    raise exception 'auth user does not exist' using errcode = '23503';
+  end if;
+
   if invite_token_hash !~ '^[0-9a-f]{64}$' then
     raise exception 'invalid invite token hash' using errcode = '22023';
   end if;
@@ -275,47 +389,59 @@ begin
     raise exception 'active pair member required' using errcode = '42501';
   end if;
 
+  if exists (
+    select 1 from public.pair_invites pi
+     where pi.pair_id = target_pair_id
+       and pi.consumed_at is null
+       and pi.invalidated_at is null
+  ) then
+    raise exception 'pending pair invite must be revoked first' using errcode = 'P0001';
+  end if;
+
   select count(*)::integer into current_count
     from public.pair_members pm
    where pm.pair_id = target_pair_id
      and pm.removed_at is null;
 
   if current_count <> 1 then
-    raise exception 'pair must have exactly one current member' using errcode = 'P0001';
+    raise exception 'pair must have exactly one current member before reserving an invite' using errcode = 'P0001';
   end if;
 
-  update public.pair_invites
-     set invalidated_at = coalesce(invalidated_at, now())
-   where pair_id = target_pair_id
-     and consumed_at is null
-     and invalidated_at is null;
-
   insert into public.pair_invites (
-    id, pair_id, token_hash, created_by, expires_at
+    id, pair_id, token_hash, created_by, invited_user_id, expires_at
   ) values (
-    new_invite_id, target_pair_id, invite_token_hash, creator_user_id, invite_expires_at
+    new_invite_id, target_pair_id, invite_token_hash, creator_user_id, invited_user_id, invite_expires_at
   );
+
+  insert into public.pair_members (pair_id, user_id, invite_id)
+  values (target_pair_id, invited_user_id, new_invite_id);
 
   return new_invite_id;
 end;
 $$;
 
-create or replace function public.consume_pair_invite(
-  invite_token_hash text,
-  invited_user_id uuid
-)
+create or replace function public.accept_pair_invite(invite_token_hash text)
 returns uuid
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
+  current_user_id uuid := auth.uid();
   invite_row public.pair_invites%rowtype;
-  pair_state public.pair_status;
-  current_count integer;
+  verified_at timestamptz;
 begin
-  if not exists (select 1 from auth.users u where u.id = invited_user_id) then
-    raise exception 'auth user does not exist' using errcode = '23503';
+  if current_user_id is null then
+    raise exception 'authentication required' using errcode = '28000';
+  end if;
+
+  select u.email_confirmed_at
+    into verified_at
+    from auth.users u
+   where u.id = current_user_id;
+
+  if verified_at is null then
+    raise exception 'verified email required' using errcode = 'P0001';
   end if;
 
   select * into invite_row
@@ -330,37 +456,34 @@ begin
     raise exception 'invite is invalid or expired' using errcode = 'P0001';
   end if;
 
-  select p.status into pair_state
+  if invite_row.invited_user_id is distinct from current_user_id then
+    raise exception 'invite does not belong to current user' using errcode = '42501';
+  end if;
+
+  perform 1
     from public.pairs p
    where p.id = invite_row.pair_id
+     and p.status = 'open_for_second_member'
    for update;
 
-  if pair_state is distinct from 'open_for_second_member'::public.pair_status then
+  if not found then
     raise exception 'pair is not accepting its second member' using errcode = 'P0001';
   end if;
-
-  select count(*)::integer into current_count
-    from public.pair_members pm
-   where pm.pair_id = invite_row.pair_id
-     and pm.removed_at is null;
-
-  if current_count <> 1 then
-    raise exception 'pair must have exactly one current member' using errcode = 'P0001';
-  end if;
-
-  insert into public.pair_members (pair_id, user_id)
-  values (invite_row.pair_id, invited_user_id);
 
   update public.pair_invites
      set consumed_at = now()
    where id = invite_row.id;
 
-  update public.pair_invites
-     set invalidated_at = coalesce(invalidated_at, now())
+  update public.pair_members
+     set activated_at = coalesce(activated_at, now())
    where pair_id = invite_row.pair_id
-     and id <> invite_row.id
-     and consumed_at is null
-     and invalidated_at is null;
+     and user_id = current_user_id
+     and invite_id = invite_row.id
+     and removed_at is null;
+
+  if not found then
+    raise exception 'reserved pair membership not found' using errcode = 'P0001';
+  end if;
 
   return invite_row.pair_id;
 end;
@@ -395,11 +518,14 @@ grant execute on function public.is_pair_member(uuid) to authenticated;
 revoke all on function public.activate_current_pair_membership() from public;
 grant execute on function public.activate_current_pair_membership() to authenticated;
 
+revoke all on function public.accept_pair_invite(text) from public;
+grant execute on function public.accept_pair_invite(text) to authenticated;
+
 revoke all on function public.create_bootstrap_pair(uuid) from public, anon, authenticated;
 grant execute on function public.create_bootstrap_pair(uuid) to service_role;
 
-revoke all on function public.create_pair_invite(uuid, uuid, text, timestamptz) from public, anon, authenticated;
-grant execute on function public.create_pair_invite(uuid, uuid, text, timestamptz) to service_role;
+revoke all on function public.revoke_pending_pair_invite(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.revoke_pending_pair_invite(uuid, uuid) to service_role;
 
-revoke all on function public.consume_pair_invite(text, uuid) from public, anon, authenticated;
-grant execute on function public.consume_pair_invite(text, uuid) to service_role;
+revoke all on function public.reserve_pair_invite(uuid, uuid, uuid, text, timestamptz) from public, anon, authenticated;
+grant execute on function public.reserve_pair_invite(uuid, uuid, uuid, text, timestamptz) to service_role;
