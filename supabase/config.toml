@@ -1,0 +1,35 @@
+project_id = "receitas"
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:5173"
+additional_redirect_urls = [
+  "http://127.0.0.1:5173/**",
+  "http://localhost:5173/**",
+  "http://127.0.0.1:4173/**",
+]
+jwt_expiry = 3600
+enable_signup = false
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = false
+double_confirm_changes = true
+enable_confirmations = true
+max_frequency = "1m"
+otp_expiry = 3600
+
+[auth.rate_limit]
+email_sent = 2
+sign_in_sign_ups = 30
+token_verifications = 30
+token_refresh = 150
+
+[storage]
+enabled = true
+file_size_limit = "20MiB"
+
+[inbucket]
+enabled = true
+port = 54324
+smtp_port = 54325
