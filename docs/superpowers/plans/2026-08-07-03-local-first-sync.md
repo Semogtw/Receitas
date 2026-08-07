@@ -73,6 +73,8 @@ export type MutationApplyResult =
   | { status: 'conflict'; conflictId: string }
 
 export interface LocalMutationWrite<T> {
+  pairId: string
+  actorUserId: string
   entityType: string
   entityId: string
   operation: MutationOperation
@@ -83,6 +85,8 @@ export interface LocalMutationWrite<T> {
   parameters: unknown[]
 }
 ```
+
+Payloads in the mutation envelope are persistence-safe JSON values. Domain-only types that use `bigint`, `Blob`, `File`, DOM objects or other non-JSON values must be mapped to database/transport representations before entering `localPayload`/`basePayload`.
 
 ---
 
@@ -175,8 +179,10 @@ Cover:
 - entity row and outbox row are written in one local transaction;
 - stable mutation UUID is generated once;
 - `basePayload` and `baseRevision` reflect the version the user edited;
+- pair/actor identity comes from explicit trusted repository inputs, not from guessed payload fields;
 - failed row SQL rolls back the outbox insert;
-- retry metadata does not alter the semantic mutation payload.
+- retry metadata does not alter the semantic mutation payload;
+- non-JSON domain values are rejected/mapped before envelope persistence.
 
 - [ ] **Step 2: Verify RED**
 
@@ -191,8 +197,8 @@ export async function writeLocalMutation<T>(db: AppDatabase, input: LocalMutatio
   const mutationId = crypto.randomUUID()
   const envelope: MutationEnvelope<T> = {
     mutationId,
-    pairId: input.localPayload['pair_id'] as string,
-    actorUserId: input.localPayload['updated_by'] as string,
+    pairId: input.pairId,
+    actorUserId: input.actorUserId,
     entityType: input.entityType,
     entityId: input.entityId,
     operation: input.operation,
@@ -201,6 +207,9 @@ export async function writeLocalMutation<T>(db: AppDatabase, input: LocalMutatio
     localPayload: input.localPayload,
     createdAt: new Date().toISOString(),
   }
+
+  const basePayloadJson = input.basePayload === null ? null : JSON.stringify(input.basePayload)
+  const localPayloadJson = JSON.stringify(input.localPayload)
 
   await db.writeTransaction(async (tx) => {
     await tx.execute(input.sql, input.parameters)
@@ -212,14 +221,14 @@ export async function writeLocalMutation<T>(db: AppDatabase, input: LocalMutatio
       ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
       [
         mutationId,
-        envelope.pairId,
-        envelope.actorUserId,
-        envelope.entityType,
-        envelope.entityId,
-        envelope.operation,
-        envelope.baseRevision,
-        JSON.stringify(envelope.basePayload),
-        JSON.stringify(envelope.localPayload),
+        input.pairId,
+        input.actorUserId,
+        input.entityType,
+        input.entityId,
+        input.operation,
+        input.baseRevision,
+        basePayloadJson,
+        localPayloadJson,
         envelope.createdAt,
       ],
     )
@@ -244,7 +253,7 @@ countPendingMutations(db): Promise<number>
 
 - [ ] **Step 5: Run tests**
 
-Expected: PASS including rollback case.
+Expected: PASS including rollback and JSON-safety cases.
 
 - [ ] **Step 6: Commit**
 
@@ -293,7 +302,7 @@ Do not use development tokens in production code.
 Map PowerSync connectivity/upload queue state to only:
 
 ```ts
-'tsynced' | 'pending' | 'syncing' | 'error' | 'conflict'
+'synced' | 'pending' | 'syncing' | 'error' | 'conflict'
 ```
 
 `conflict` wins when one or more open conflict records exist; otherwise pending queue with no active upload is `pending`.
@@ -373,7 +382,7 @@ const handlers: Record<string, MutationHandler> = {
 }
 ```
 
-Never concatenate arbitrary `entityType` into SQL identifiers.
+Before completing this task, replace the illustrative three-entry object above with an explicit entry for every syncable domain entity defined in `src/data/schema.ts`. Never derive SQL table names from untrusted `entityType` input.
 
 - [ ] **Step 4: Implement deterministic three-way comparison**
 
@@ -421,7 +430,7 @@ Cover:
 
 For each PowerSync CRUD entry, resolve `{table,id}` to the matching local outbox envelope and invoke `sync-mutation` with the authenticated Supabase client.
 
-Pseudo-flow:
+The logical flow is:
 
 ```ts
 const transaction = await db.getNextCrudTransaction()
@@ -436,7 +445,7 @@ for (const entry of transaction.crud) {
 await transaction.complete()
 ```
 
-Use exact current method names from @Context7/SDK source at execution time.
+Use exact current SDK method/property names confirmed by @Context7 at execution time; preserve the ordering and completion semantics shown here.
 
 - [ ] **Step 3: Preserve retry semantics**
 
@@ -514,6 +523,7 @@ git commit -m "feat: add explicit conflict resolution flow"
 - Create: `src/data/session/local-session-policy.test.ts`
 - Modify: `src/features/auth/AuthProvider.tsx`
 - Create: `tests/e2e/offline-sync.spec.ts`
+- Create: `tests/e2e/conflicts.spec.ts`
 
 **Interfaces:**
 - Produces `prepareLocalStateForLogout(db): Promise<'safe' | 'pending_data_preserved'>`.
