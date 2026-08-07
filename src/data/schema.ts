@@ -43,7 +43,7 @@ const recipes = new Table({
   source_kind: column.text,
   source_url: column.text,
   created_by: column.text,
-}, { indexes: { pair_updated: ['pair_id', '-updated_at'] } })
+}, { indexes: { pair_updated: ['pair_id', 'updated_at'] } })
 
 const recipe_ingredients = new Table({
   ...common,
@@ -103,7 +103,7 @@ const cooking_sessions = new Table({
   shared_observation: column.text,
   recipe_snapshot_version: column.integer,
   recipe_snapshot: column.text,
-}, { indexes: { recipe_prepared: ['recipe_id', '-prepared_at'], pair_prepared: ['pair_id', '-prepared_at'] } })
+}, { indexes: { recipe_prepared: ['recipe_id', 'prepared_at'], pair_prepared: ['pair_id', 'prepared_at'] } })
 
 const cooking_session_ratings = new Table({
   ...common,
@@ -148,7 +148,7 @@ const imports = new Table({
   extracted_payload: column.text,
   extraction_errors: column.text,
   saved_recipe_id: column.text,
-}, { indexes: { pair_created: ['pair_id', '-created_at'] } })
+}, { indexes: { pair_created: ['pair_id', 'created_at'] } })
 
 const meal_periods = new Table({
   ...common,
@@ -172,7 +172,7 @@ const shopping_lists = new Table({
   name: column.text,
   is_default: column.integer,
   completed_at: column.text,
-}, { indexes: { pair_updated: ['pair_id', '-updated_at'] } })
+}, { indexes: { pair_updated: ['pair_id', 'updated_at'] } })
 
 const shopping_items = new Table({
   ...common,
@@ -203,7 +203,7 @@ const conflicts = new Table({
   resolved_by: column.text,
   created_at: column.text,
   resolved_at: column.text,
-}, { indexes: { pair_status: ['pair_id', 'status', '-created_at'], entity: ['pair_id', 'entity_type', 'entity_id'] } })
+}, { indexes: { pair_status: ['pair_id', 'status', 'created_at'], entity: ['pair_id', 'entity_type', 'entity_id'] } })
 
 const mutation_outbox = Table.createLocalOnly({
   pair_id: column.text,
