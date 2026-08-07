@@ -3,7 +3,7 @@ import { jsonResponse, preflightResponse, readJsonObject, requestOriginAllowed }
 import { getAdminClient, getAppBaseUrl, getRequestUserId } from '../_shared/server.ts'
 import { PairInvitePublicError, runPairInvite } from './service.ts'
 
-const INVITE_TTL_SECONDS = 3600
+const INVITE_TTL_SECONDS = 86400
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return preflightResponse(request)
@@ -55,10 +55,7 @@ Deno.serve(async (request) => {
         const { error } = await admin.auth.admin.deleteUser(userId)
         if (error) throw error
       },
-      createToken: async () => {
-        const raw = randomOpaqueToken(32)
-        return { raw, hash: await sha256Hex(raw) }
-      },
+      createNonceHash: async () => sha256Hex(randomOpaqueToken(32)),
       inviteUser: async (email, redirectTo) => {
         const { data, error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo })
         if (error || !data.user) throw error ?? new Error('missing_invited_user')
