@@ -13,6 +13,8 @@ Existem somente dois caminhos legítimos de criação de conta/membro dentro do 
 
 Depois que o segundo membro entra, o sistema fica fechado para novas contas/membros pelo fluxo do aplicativo.
 
+As duas identidades autorizadas usam autenticação por e-mail e senha e devem possuir **e-mail verificado** antes de serem consideradas plenamente configuradas.
+
 ## 2. Bootstrap inicial
 
 O bootstrap existe apenas enquanto ainda não há par inicializado.
@@ -72,7 +74,23 @@ O que não deve existir publicamente:
 
 Descobrir o endereço do aplicativo não deve ser suficiente para ganhar acesso aos dados ou criar uma conta.
 
-## 6. Autorização depois do login
+## 6. Verificação de e-mail
+
+As duas contas autorizadas devem confirmar o endereço de e-mail associado à identidade.
+
+Regras:
+
+- a primeira conta criada pelo bootstrap deve concluir a verificação do e-mail;
+- a segunda conta criada pelo fluxo de convite também deve concluir a verificação;
+- uma conta ainda não verificada pode existir em estado transitório, mas não deve ser tratada como plenamente configurada;
+- o plano de implementação deve limitar operações sensíveis até a verificação, especialmente ações que consolidem definitivamente uma nova identidade;
+- concluir verificação não cria novo usuário, não altera `pair_id` e não reabre qualquer fluxo de cadastro;
+- alteração de e-mail, caso seja suportada no futuro, deve exigir nova verificação do endereço antes de ele ser considerado confiável para recuperação;
+- o estado de verificação é uma propriedade da identidade autenticada e não deve ser inferido apenas pela interface.
+
+A implementação deve usar as garantias do provedor de autenticação para confirmação de endereço e não construir um mecanismo paralelo de tokens de verificação sem necessidade.
+
+## 7. Autorização depois do login
 
 Autenticação identifica o usuário; autorização depende da associação ao `pair`.
 
@@ -88,7 +106,7 @@ pertence ao pair_id do recurso?
 
 RLS e validações de backend permanecem obrigatórias mesmo com somente dois usuários conhecidos.
 
-## 7. Convites e vazamento de token
+## 8. Convites e vazamento de token
 
 O token de convite deve ser tratado como credencial temporária.
 
@@ -104,7 +122,7 @@ Boas propriedades exigidas:
 
 Se um token expirar ou for invalidado, o primeiro membro pode gerar outro enquanto o par ainda possuir apenas um membro.
 
-## 8. Recuperação de senha
+## 9. Recuperação de senha
 
 Cada uma das duas contas existentes pode recuperar o próprio acesso por **redefinição de senha via e-mail**.
 
@@ -117,6 +135,7 @@ Regras:
 - concluir a recuperação mantém o mesmo `user_id` e a mesma associação ao `pair`;
 - a recuperação nunca aumenta o número de membros do par;
 - o fluxo continua disponível mesmo depois que o par está fechado;
+- o endereço usado como canal de recuperação deve ser um e-mail verificado da conta;
 - tokens/links de recuperação devem ter validade limitada e ser invalidados conforme as garantias do provedor de autenticação;
 - mensagens públicas de solicitação devem evitar revelar desnecessariamente se determinado e-mail possui conta, quando isso puder ser feito sem prejudicar a experiência;
 - redefinir a senha não deve reabrir bootstrap, convite ou qualquer outra capacidade de criação de conta;
@@ -124,13 +143,13 @@ Regras:
 
 A recuperação de senha é, portanto, compatível com o princípio de exatamente duas pessoas: ela restaura acesso a uma identidade existente, não cria uma nova identidade autorizada.
 
-## 9. Rate limiting e abuso
+## 10. Rate limiting e abuso
 
-Rotas sensíveis como login, bootstrap, criação/aceitação de convite e recuperação de credenciais devem ser protegidas contra tentativas automatizadas em volume.
+Rotas sensíveis como login, bootstrap, criação/aceitação de convite, verificação de e-mail e recuperação de credenciais devem ser protegidas contra tentativas automatizadas em volume.
 
 A estratégia exata pode combinar limites do provedor e controles adicionais no backend, mas a ausência de cadastro público **não elimina** a necessidade de proteger superfícies de autenticação contra abuso.
 
-## 10. Sessão e armazenamento no cliente
+## 11. Sessão e armazenamento no cliente
 
 - tokens de sessão nunca são tratados como autorização absoluta fora das regras de backend;
 - dados locais pertencem a um usuário autenticado e ao `pair` correspondente;
@@ -138,7 +157,7 @@ A estratégia exata pode combinar limites do provedor e controles adicionais no 
 - o plano de implementação deve definir limpeza/isolamento do armazenamento local por identidade para evitar mistura de dados entre sessões;
 - segredos administrativos nunca são persistidos no armazenamento local da PWA.
 
-## 11. Operações privilegiadas
+## 12. Operações privilegiadas
 
 Devem permanecer em ambiente servidor/Edge Function, entre outras:
 
@@ -149,7 +168,7 @@ Devem permanecer em ambiente servidor/Edge Function, entre outras:
 - importação de URL quando envolver fetch servidor;
 - geração/restauração de backup quando exigir acesso abrangente a dados/mídia.
 
-## 12. Invariantes que testes devem cobrir
+## 13. Invariantes que testes devem cobrir
 
 No mínimo:
 
@@ -166,9 +185,13 @@ No mínimo:
 11. recuperação de senha funciona para conta existente sem criar nova identidade ou novo membro;
 12. solicitação de recuperação para endereço sem conta não cria usuário;
 13. redefinição de senha preserva `user_id` e associação ao `pair`;
-14. recuperação de senha não reabre bootstrap nem capacidade de convite após fechamento do par.
+14. recuperação de senha não reabre bootstrap nem capacidade de convite após fechamento do par;
+15. primeira e segunda contas chegam ao estado plenamente configurado somente após verificação do respectivo e-mail;
+16. verificar e-mail não cria novo membro nem modifica a associação ao par;
+17. recuperação usa somente endereço verificado da conta;
+18. um endereço não verificado não deve ser tratado como canal confiável de recuperação.
 
-## 13. Relação com outros documentos
+## 14. Relação com outros documentos
 
 - Requisitos funcionais: `docs/PRODUCT.md`.
 - Arquitetura e RLS: `docs/ARCHITECTURE.md`.
