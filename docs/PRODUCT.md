@@ -151,6 +151,18 @@ Existem dois conjuntos distintos de mídia:
 
 As duas galerias não devem ser misturadas conceitualmente.
 
+### 7.1 Disponibilidade local e offline
+
+- Capas, miniaturas e fotos recentes recebem prioridade de cache local para manter a navegação rápida e útil sem rede.
+- Originais em resolução completa permanecem armazenados de forma canônica no Storage privado e podem ser baixados sob demanda quando não estiverem no dispositivo.
+- Uma foto recém-tirada/selecionada permanece protegida localmente enquanto o upload ainda não tiver sido confirmado; falha de upload não pode apagar a única cópia conhecida pelo app.
+- Cada receita oferece a ação **“Disponibilizar offline”**, que prepara localmente seus dados e mídias para consulta sem conexão.
+- A preferência “Disponibilizar offline” é local ao dispositivo e não precisa ser imposta ao outro membro.
+- Limpar cache não equivale a excluir uma foto da receita ou do histórico.
+- A interface deve distinguir conteúdo disponível offline, download pendente/parcial e mídia que exige conexão para baixar o original.
+
+A política detalhada de cache, originais, downloads e integridade de mídia está em `docs/MEDIA_STORAGE.md`.
+
 ## 8. Lista de compras
 
 A lista de compras é compartilhada entre os dois usuários e funciona offline.
