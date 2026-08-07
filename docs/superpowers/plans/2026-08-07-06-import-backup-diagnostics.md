@@ -4,9 +4,9 @@
 
 **Goal:** Add secure recipe import, complete open-format backup/export, validated merge/replace restoration, exceptional account administration and privacy-preserving diagnostics without paid APIs.
 
-**Architecture:** Recipe import and privileged restore/account operations run behind authenticated server-side boundaries. Backups use a versioned ZIP container with JSON manifest/domain data and media; restore is staged and fully validated before canonical data changes. Diagnostics are generated locally from sanitized technical events and contain no recipe content, tokens or photos.
+**Architecture:** Recipe import and privileged restore/account operations run behind authenticated server-side boundaries. Backup ZIP assembly happens on the client from synchronized local structured data plus authenticated private-media downloads, avoiding heavy compression work inside the strict CPU budget of free Edge Functions. Restore is two-phase: the client validates and stages an archive/media set, server endpoints revalidate every staged batch and cross-reference, and only a final commit operation mutates canonical rows.
 
-**Tech Stack:** Supabase Edge Functions/Postgres/Storage, TypeScript, deterministic HTML/JSON-LD parsing, streaming ZIP library selected from current maintained free OSS packages, Vitest, Playwright, Codex Security.
+**Tech Stack:** Supabase Edge Functions/Postgres/Storage, TypeScript, deterministic HTML/JSON-LD parsing, maintained free OSS streaming ZIP library, OPFS when available with bounded Blob fallback, Vitest, Playwright, Codex Security.
 
 ## Global Constraints
 
@@ -21,6 +21,7 @@
 - Backups never contain passwords, sessions, bootstrap secret, service-role key or provider credentials.
 - Diagnostics contain technical metadata only, not personal recipe/photo content.
 - Exceptional account removal/replacement never becomes public signup or automatic seat reopening.
+- Free-tier runtime limits are architectural constraints, not reasons to drop safety requirements.
 
 ---
 
@@ -39,14 +40,16 @@ supabase/functions/import-recipe/parse-html.ts
 supabase/functions/import-recipe/*.test.ts
 src/features/backups/domain/format.ts
 src/features/backups/domain/validation.ts
+src/features/backups/data/archive-writer.ts
 src/features/backups/data/backup-service.ts
+src/features/backups/data/restore-staging-service.ts
 src/features/backups/components/BackupExport.tsx
 src/features/backups/components/BackupRestore.tsx
-supabase/functions/backup-export/index.ts
 supabase/functions/backup-restore/index.ts
 supabase/functions/backup-restore/staging.ts
 supabase/functions/backup-restore/validation.ts
 supabase/functions/backup-restore/*.test.ts
+supabase/migrations/0007_restore_staging.sql
 supabase/functions/account-admin/index.ts
 supabase/functions/account-admin/index.test.ts
 src/features/diagnostics/events.ts
@@ -103,26 +106,19 @@ export type RestoreMode = 'merge' | 'replace_all'
 
 - [ ] **Step 1: Write failing Schema.org Recipe tests**
 
-Fixtures must cover:
-- direct `Recipe` object;
-- `@graph` containing Recipe;
-- `recipeIngredient` string array;
-- `recipeInstructions` as strings and `HowToStep` objects;
-- ISO-8601 duration parsing;
-- missing optional fields;
-- malformed JSON-LD ignored without executing HTML/script.
+Fixtures must cover direct `Recipe`, `@graph`, ingredient arrays, string/`HowToStep` instructions, ISO-8601 durations, missing optional fields and malformed JSON-LD. Malformed script content is data only and must never execute.
 
 - [ ] **Step 2: Implement safe JSON-LD extraction**
 
-Parser accepts already-extracted JSON strings/objects, never evaluates script code and only reads known Recipe fields.
+Read only known Recipe fields from already-extracted inert JSON values.
 
 - [ ] **Step 3: Write failing paste-text tests**
 
-Use deterministic section heuristics for title, ingredients and preparation lines. Partial parsing returns warnings and preserves raw lines instead of hallucinating structure.
+Use deterministic section heuristics for title, ingredients and preparation lines. Partial parsing returns warnings and preserves raw lines instead of inventing structure.
 
 - [ ] **Step 4: Implement text parser and normalization**
 
-Attempt existing ingredient amount parser from plan 04; if a line cannot be safely structured, keep raw text for review.
+Attempt the ingredient amount parser from plan 04; keep unparseable lines raw for review.
 
 - [ ] **Step 5: Run tests and commit**
 
@@ -149,48 +145,31 @@ git commit -m "feat: add deterministic recipe import parsers"
 
 - [ ] **Step 1: Verify current Supabase Edge runtime network/DNS APIs with @Context7**
 
-Confirm whether the runtime exposes DNS resolution sufficient to validate A/AAAA addresses before fetch. Use the runtime's supported resolver if available. If it does not, implement the resolver through a documented public DNS-over-HTTPS endpoint and keep DNS resolution behind the injected `resolveHost(hostname)` interface so integration behavior is testable; do not omit IP-range validation.
+Confirm the supported resolver path. Implement `resolveHost(hostname): Promise<string[]>` behind an injected interface. If the runtime has a supported direct DNS resolver, use it. Otherwise use a documented public DNS-over-HTTPS endpoint and preserve the same IP classification/revalidation tests; do not skip address validation.
 
 - [ ] **Step 2: Write failing URL policy tests**
 
-Reject:
-- schemes other than http/https;
-- URL credentials;
-- localhost names;
-- literal private/link-local/loopback/multicast/reserved IPv4/IPv6;
-- hostname resolving to a forbidden address;
-- redirect to forbidden host/address;
-- excessive redirects.
+Reject non-http(s), URL credentials, localhost, literal private/link-local/loopback/multicast/reserved IPv4/IPv6, a hostname resolving to forbidden address, redirect to forbidden address and excessive redirects.
 
 - [ ] **Step 3: Implement explicit IP classification**
 
-Write pure `isPublicAddress(ip)` covering IPv4 and IPv6 reserved/private ranges. Test every class used by the policy.
+Pure `isPublicAddress(ip)` covers all blocked IPv4 and IPv6 classes with table-driven tests.
 
-- [ ] **Step 4: Implement manual-redirect fetch**
+- [ ] **Step 4: Implement manual-redirect safe fetch**
 
-For each hop:
-1. parse URL;
-2. validate scheme/credentials/hostname;
-3. resolve and reject forbidden addresses;
-4. issue fetch with `redirect: 'manual'`;
-5. re-run checks on next location;
-6. enforce timeout;
-7. enforce response body byte ceiling while streaming;
-8. accept only configured HTML/text content types.
+For every hop: parse → validate → resolve → reject forbidden addresses → fetch with `redirect:'manual'` → revalidate redirect → enforce timeout/body-byte ceiling/content type. Never forward browser cookies or arbitrary authorization headers to target sites.
 
-Do not forward browser cookies or arbitrary authorization headers to target sites.
+- [ ] **Step 5: Implement inert HTML extraction**
 
-- [ ] **Step 5: Implement inert HTML parsing**
+Extract JSON-LD/meta/title/visible recipe-like text with a parser; never render remote HTML or execute scripts.
 
-Extract JSON-LD, title/meta content and visible recipe-like text using an HTML parser; never inject fetched HTML into the app and never execute scripts.
+- [ ] **Step 6: Implement authenticated orchestration**
 
-- [ ] **Step 6: Implement authenticated function orchestration**
+Verify pair membership, apply abuse/rate controls, parse JSON-LD first then fallback and return a review draft only.
 
-Verify caller is active pair member, apply rate limits/abuse controls, call `safeFetch`, parse JSON-LD first then HTML fallback, preserve original URL and return a draft only.
+- [ ] **Step 7: Run tests + focused Codex Security review**
 
-- [ ] **Step 7: Run tests + Codex Security focused review**
-
-Security scope: URL validation, DNS/IP checks, redirects, body limits, parsing and logs. Fix validated SSRF/resource-exhaustion findings.
+Fix validated SSRF/resource-exhaustion issues before completion.
 
 - [ ] **Step 8: Commit**
 
@@ -210,26 +189,21 @@ git commit -m "feat: add secure server-side recipe import"
 - Create: component tests
 - Modify: `src/app/routes/RecipesRoute.tsx`
 
-**Interfaces:**
-- Consumes `ImportedRecipeDraft`; canonical save uses recipe repository only after explicit review confirmation.
-
 - [ ] **Step 1: Write UI tests**
 
-Cover URL submission, partial extraction warnings, paste-text fallback, editable review fields and cancel without save.
+Cover URL submission, partial warnings, paste-text fallback, editable review and cancel without save.
 
-- [ ] **Step 2: Implement import entry surface**
+- [ ] **Step 2: Implement import entry**
 
-Provide URL import and paste-text import. Do not claim every site is supported.
+Offer URL and paste-text modes; do not claim universal site support.
 
 - [ ] **Step 3: Implement review surface**
 
-All extracted title/ingredients/steps/image/source are editable/removable before save. Save action maps reviewed data into normal recipe-create repository calls.
+All extracted content is editable/removable. Canonical save happens only after explicit confirmation through the normal recipe repository.
 
-- [ ] **Step 4: Rendered QA**
+- [ ] **Step 4: Rendered QA and commit**
 
-Use @Build Web Apps for loading, partial, error and review states on mobile/desktop.
-
-- [ ] **Step 5: Commit**
+Use @Build Web Apps for loading/partial/error/review mobile+desktop.
 
 ```bash
 git add src/features/imports src/app/routes/RecipesRoute.tsx
@@ -238,30 +212,26 @@ git commit -m "feat: add reviewed recipe import flow"
 
 ---
 
-### Task 4: Define and generate the open backup format
+### Task 4: Define the versioned backup format and streaming client archive writer
 
 **Files:**
 - Create: `src/features/backups/domain/format.ts`
 - Create: `src/features/backups/domain/format.test.ts`
-- Create: `supabase/functions/backup-export/index.ts`
-- Create: `supabase/functions/backup-export/index.test.ts`
+- Create: `src/features/backups/data/archive-writer.ts`
+- Create: `src/features/backups/data/archive-writer.test.ts`
 - Create: `src/features/backups/data/backup-service.ts`
+- Create: `src/features/backups/data/backup-service.test.ts`
 
 **Interfaces:**
-- Produces version-1 `receitas-backup` ZIP with manifest, JSON data files and media.
+- Produces `createCompleteBackup(): Promise<BackupArtifact>` and version-1 `receitas-backup` ZIP.
 
-- [ ] **Step 1: Select and verify a maintained free streaming ZIP library**
+- [ ] **Step 1: Select a maintained free streaming ZIP library**
 
-Use @Context7/current package docs. Prefer streaming ZIP output that works in Supabase Edge/Deno so a backup does not require holding all media bytes in memory. Pin the chosen OSS package/version in function import configuration.
+Verify current browser/worker support via @Context7/package docs. Prefer a library that accepts streaming entry sources and can write to a `WritableStream`/OPFS target. Photos are already compressed, so use store/no-compression for media entries to avoid wasted CPU.
 
 - [ ] **Step 2: Write failing manifest tests**
 
-Require:
-- exact format/version;
-- deterministic data file paths;
-- SHA-256 + byte count for each entry;
-- no auth/session/secret records;
-- pair export identifier is a backup-domain identifier, not authorization data to import literally.
+Require exact format/version, deterministic paths, SHA-256/byte count for every entry and absence of auth/session/secret fields.
 
 - [ ] **Step 3: Define canonical archive layout**
 
@@ -284,78 +254,79 @@ data/photo-metadata.json
 media/<stable-photo-id>.<ext>
 ```
 
-Conflicts may be exported as diagnostic/history data if the backup spec requires them, but provider credentials never are.
+Provider credentials and active session data are forbidden.
 
-- [ ] **Step 4: Implement authenticated streaming export**
+- [ ] **Step 4: Implement structured-data export from a synchronized local snapshot**
 
-Function verifies active pair membership, queries only that pair, serializes stable open JSON and streams private media into the ZIP while computing checksums.
+Before backup begins, require local sync queue to be drained or explicitly report that a full canonical backup cannot yet be produced. Read structured rows from the local database in one consistent snapshot where supported.
 
-- [ ] **Step 5: Add client download action**
+- [ ] **Step 5: Implement authenticated media streaming**
 
-`backup-service.ts` requests export with current session and saves the returned archive through standard browser download/share capability. No provider admin key enters client.
+For each canonical photo metadata row, use the private Storage adapter to stream/download the original. Reuse the media SHA-256 persisted at successful upload when available; otherwise compute it client-side while streaming and persist it for future exports.
 
-- [ ] **Step 6: Run tests and commit**
+- [ ] **Step 6: Implement OPFS-first output**
+
+If OPFS writable files are available, stream ZIP output there and expose the resulting file for download/share without retaining all media in JS memory. If OPFS is unavailable, allow a Blob fallback only when estimated backup size is below a conservative tested memory threshold; otherwise show a truthful “este navegador não consegue gerar um backup deste tamanho com segurança” error rather than crashing or silently omitting media.
+
+- [ ] **Step 7: Run unit tests and commit**
 
 ```bash
-pnpm vitest run src/features/backups/domain/format.test.ts
-# run edge function tests
-git add src/features/backups supabase/functions/backup-export
-git commit -m "feat: export complete open-format backups"
+pnpm vitest run src/features/backups/domain/format.test.ts src/features/backups/data/archive-writer.test.ts src/features/backups/data/backup-service.test.ts
+git add src/features/backups
+git commit -m "feat: generate complete client-side backups"
 ```
 
 ---
 
-### Task 5: Implement complete preflight backup validation and staging
+### Task 5: Implement complete archive preflight and private restore staging
 
 **Files:**
 - Create: `src/features/backups/domain/validation.ts`
 - Create: `src/features/backups/domain/validation.test.ts`
+- Create: `src/features/backups/data/restore-staging-service.ts`
+- Create: `src/features/backups/data/restore-staging-service.test.ts`
+- Create: `supabase/migrations/0007_restore_staging.sql`
 - Create: `supabase/functions/backup-restore/validation.ts`
 - Create: `supabase/functions/backup-restore/staging.ts`
 - Create: tests
 
 **Interfaces:**
-- Produces `validateBackupManifest` client helper and server `validateAndStageBackup`.
+- Produces staged restore job with state `uploading -> validating -> ready_to_commit | rejected`.
 
-- [ ] **Step 1: Write failing archive validation tests**
+- [ ] **Step 1: Write failing local archive validation tests**
 
-Reject:
-- wrong format/version;
-- duplicate paths;
-- absolute paths;
-- `..` path traversal/zip-slip;
-- symlink-like entries if library exposes them;
-- too many files;
-- total declared/uncompressed size over configured ceiling;
-- entry compression ratio over configured ZIP-bomb ceiling;
-- checksum/byte mismatch;
-- unexpected executable/content types;
-- malformed JSON schema;
-- cross-reference integrity failures;
-- auth/user IDs attempting to create a third member.
+Reject wrong format/version, duplicate/absolute/`..` paths, symlink-like entries, excessive file count/size/compression ratio, checksum mismatch, unexpected media types, malformed JSON and broken domain cross-references.
 
-- [ ] **Step 2: Implement central limits as named constants**
+- [ ] **Step 2: Implement central safety limits**
 
-Keep limits in one file and document rationale. Set ceilings above the maximum expected by the project's current free Storage quota but below runtime-dangerous values where necessary. If Edge runtime limits are lower than full backup size, use private Storage staging plus chunked/streamed validation rather than weakening validation.
+Keep constants in one source file, with tested ceilings derived from current product quotas/runtime limits. They must prevent ZIP-bomb/resource exhaustion while allowing a legitimate backup within the app's supported storage envelope.
 
-- [ ] **Step 3: Implement staging**
+- [ ] **Step 3: Implement private staging tables/Storage prefix**
 
-Incoming restore archive is uploaded to a private temporary restore path. Validation streams every archive entry and may stage verified media under a temporary restore ID. No canonical DB row or final media path changes during this phase.
+`restore_jobs` stores authenticated pair, mode, state, manifest hash and validation progress. Parsed structured batches go to staging tables or a validated JSON staging record; media goes under a private `restore-staging/<job-id>/...` prefix. Staging is not canonical product state.
 
-- [ ] **Step 4: Verify complete preflight property**
+- [ ] **Step 4: Stage in bounded batches**
 
-Tests must prove a corrupt last entry results in zero canonical mutations.
+Client streams archive entries, validates locally, uploads verified media/data batches to private staging, and sends checksums/metadata. Each server staging call rechecks auth/pair ownership, declared hash/size and schema. Keep each Edge request comfortably below current free CPU/wall-clock limits.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Implement server final-preflight endpoint**
+
+Before a job becomes `ready_to_commit`, the server checks that all manifest entries exist in staging, hashes/sizes match, cross-references are valid and no payload can create/replace Auth identities or open membership capacity.
+
+- [ ] **Step 6: Prove complete preflight**
+
+A corrupt final entry or missing staged object leaves job `rejected` and canonical tables untouched.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/features/backups/domain/validation* supabase/functions/backup-restore
-git commit -m "feat: validate and stage backup archives safely"
+git add src/features/backups/domain/validation* src/features/backups/data/restore-staging-service* supabase/migrations/0007_restore_staging.sql supabase/functions/backup-restore
+git commit -m "feat: validate and stage backup restores safely"
 ```
 
 ---
 
-### Task 6: Implement merge and replace-all restore modes
+### Task 6: Implement merge and replace-all restore commit
 
 **Files:**
 - Create: `supabase/functions/backup-restore/index.ts`
@@ -366,42 +337,31 @@ git commit -m "feat: validate and stage backup archives safely"
 - Modify: `src/features/backups/data/backup-service.ts`
 
 **Interfaces:**
-- Produces restore modes `merge` and `replace_all`.
+- Produces restore modes `merge` and `replace_all` using only jobs in `ready_to_commit` state.
 
 - [ ] **Step 1: Write failing merge tests**
 
-Stable IDs:
-- missing entity inserts;
-- identical entity no-ops;
-- same stable ID with incompatible revision creates normal `conflicts` record;
-- soft-deleted divergent entities are not silently resurrected;
-- media checksum can deduplicate identical object content.
+Missing stable IDs insert; identical rows no-op; incompatible same-ID data creates normal conflict; divergent soft delete is not silently resurrected; matching media checksum deduplicates.
 
-- [ ] **Step 2: Implement merge through normal conflict semantics**
+- [ ] **Step 2: Implement merge commit through normal domain conflict semantics**
 
-Map imported data into current pair authorization boundary. Do not import source backup's Auth user IDs as new identities. Preserve historical attribution as backup-domain metadata where needed.
+Map all data into the current pair authorization boundary. Historical attribution may be preserved as inert backup metadata, but source Auth IDs never become new members.
 
 - [ ] **Step 3: Write failing replace-all safety tests**
 
-Require:
-1. current-state safety backup export succeeds;
-2. safety backup itself validates;
-3. incoming backup already passed full preflight;
-4. only then canonical replacement transaction begins.
+A replace commit requires a `safety_backup_id` whose archive has already been generated from the current synchronized state, uploaded to a private safety-backup path and passed the same validation pipeline. Missing/invalid safety backup aborts replacement.
 
-If safety backup generation/validation fails, replacement aborts.
+- [ ] **Step 4: Automate safety backup generation in the restore UI**
 
-- [ ] **Step 4: Implement staged media + transactional structured replace**
+When user confirms `replace_all`, the client automatically runs `createCompleteBackup()`, stores/downloads a copy for the user, uploads the same validated archive to the private safety-backup staging area, waits for server validation, then enables the destructive commit call.
 
-Use a restore job ID. Stage/copy media to safe target objects before committing structured DB references. Apply structured replacement in a DB transaction. Orphan staged/final media from a failed DB transaction are cleanup candidates and must not become referenced canonical product data.
+- [ ] **Step 5: Implement staged media + transactional structured commit**
 
-- [ ] **Step 5: Implement restore UI**
+Promote/copy validated staged media to safe final object keys before structured DB commit; orphan media from a later DB failure is unreferenced and cleaned by job cleanup. Apply structured replacement in a Postgres transaction so canonical rows never become half-replaced.
 
-Clearly distinguish “Mesclar” vs “Substituir tudo”. Replace-all uses explicit destructive confirmation and states that an automatic safety backup is created first.
+- [ ] **Step 6: Implement restore UI**
 
-- [ ] **Step 6: Add recovery result**
-
-After replace-all, return the safety-backup identifier/download metadata so the user can recover if necessary. Do not silently delete it immediately.
+Clearly distinguish Mesclar/Substituir tudo, show validation progress, safety-backup outcome and final result. Corrupt/incompatible archive fails before commit.
 
 - [ ] **Step 7: Run tests + security review and commit**
 
@@ -420,32 +380,19 @@ git commit -m "feat: restore backups with merge and safe replace modes"
 - Create: `src/features/auth/AccountAdminScreen.tsx`
 - Create: `src/features/auth/AccountAdminScreen.test.tsx`
 
-**Interfaces:**
-- Produces privileged operations for explicit member removal and controlled replacement without reopening public signup.
-
 - [ ] **Step 1: Write failing lifecycle tests**
 
-Cover:
-- normal user cannot remove the other identity casually;
-- operation requires recent authentication/explicit destructive confirmation according to current provider capabilities;
-- removing identity does not cascade-delete shared recipes/history/media;
-- pair remains closed;
-- replacement requires a separate high-entropy one-time administrative recovery token/flow, not normal invite route;
-- previous authorship/historical user reference is preserved.
+Normal user cannot casually remove the other identity; destructive operation requires current provider's strongest practical recent-auth confirmation; shared data does not cascade-delete; pair remains closed; replacement uses a distinct administrative recovery flow; previous authorship remains historical.
 
-- [ ] **Step 2: Implement server authorization and backup precondition**
+- [ ] **Step 2: Require safety backup**
 
-Before destructive identity removal, require a successful recent backup or explicit verified safety-backup generation. Never expose provider admin APIs to the browser.
+Before identity removal, require a successful current backup artifact validated by the same backup validator.
 
-- [ ] **Step 3: Implement controlled replacement path**
+- [ ] **Step 3: Implement controlled replacement**
 
-Replacement can occupy the vacant active membership only through account-admin logic that explicitly verifies the closed pair's recovery state. It must not make generic invite creation available after pair closure.
+Only account-admin logic can occupy a vacant active membership after explicit recovery authorization. Normal invite remains closed.
 
-- [ ] **Step 4: Build deliberately buried settings UI**
-
-This is not a common action. Use clear destructive copy and show backup outcome before final confirmation.
-
-- [ ] **Step 5: Run Codex Security review and commit**
+- [ ] **Step 4: Build buried settings UI, security-review and commit**
 
 ```bash
 git add supabase/functions/account-admin src/features/auth/AccountAdminScreen*
@@ -454,7 +401,7 @@ git commit -m "feat: add controlled account lifecycle administration"
 
 ---
 
-### Task 8: Implement sanitized diagnostics event store/export
+### Task 8: Implement sanitized diagnostics store/export
 
 **Files:**
 - Create: `src/features/diagnostics/events.ts`
@@ -467,7 +414,6 @@ git commit -m "feat: add controlled account lifecycle administration"
 - Create: component tests
 
 **Interfaces:**
-- Produces structured `DiagnosticEvent` and `exportDiagnostics()`.
 
 ```ts
 export interface DiagnosticEvent {
@@ -482,25 +428,21 @@ export interface DiagnosticEvent {
 
 - [ ] **Step 1: Write failing sanitizer tests**
 
-Ensure context rejects/removes keys or values representing tokens, Authorization headers, passwords, bootstrap secret, recipe text, e-mail address, arbitrary payload/body and image data.
+Reject/remove token, Authorization, password, bootstrap secret, recipe text, e-mail, arbitrary body/payload and image data.
 
-- [ ] **Step 2: Implement bounded local event store**
+- [ ] **Step 2: Implement bounded local store**
 
-Keep a short fixed maximum count/size. Oldest events roll off. No analytics transport is added.
+Fixed maximum count/size; oldest events roll off; no analytics transport.
 
-- [ ] **Step 3: Implement diagnostic export**
+- [ ] **Step 3: Implement export**
 
-Output JSON containing app version/build, browser/platform summary, sync queue counts/status and sanitized recent events. Do not include full database rows.
+Include app version/build, browser/platform summary, sync queue counts/status and sanitized recent events only.
 
-- [ ] **Step 4: Implement temporary verbose logging switch**
+- [ ] **Step 4: Implement time-bounded verbose mode**
 
-Device-local and time-bounded. Even verbose mode obeys sanitizer and never permits secrets/content payloads.
+Device-local and still sanitized.
 
-- [ ] **Step 5: Build diagnostics settings UI and tests**
-
-Actions: view technical status, export diagnostic file, temporarily enable detailed technical logging. No tracking consent/analytics screen because analytics are absent by default.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Build diagnostics UI and commit**
 
 ```bash
 git add src/features/diagnostics
@@ -518,23 +460,23 @@ git commit -m "feat: add private sanitized diagnostics export"
 
 - [ ] **Step 1: Import E2E**
 
-Use controlled HTTP fixtures: JSON-LD recipe, HTML fallback, oversized response, bad redirect, forbidden-address fixture/mocked resolver. Verify review before save.
+Controlled fixtures: JSON-LD, HTML fallback, oversized response, forbidden redirect/address; verify manual review before save.
 
 - [ ] **Step 2: Backup round-trip E2E**
 
-Create representative pair data + media → export → validate archive → mutate current state → merge restore → verify conflicts where expected.
+Create representative structured data + media → sync → export → validate → mutate → merge restore → verify expected inserts/conflicts.
 
 - [ ] **Step 3: Replace-all safety E2E**
 
-Create state A → export incoming B → invoke replace → verify safety backup A exists and validates → verify B becomes canonical → restore A from safety backup to prove rollback path.
+State A → incoming B → automatic safety backup A → server validates A → replace with B → restore A from safety backup.
 
-- [ ] **Step 4: Corrupt-last-entry E2E**
+- [ ] **Step 4: Corrupt-final-entry E2E**
 
-Provide archive whose final media/checksum is corrupt. Assert canonical state unchanged.
+Archive with corrupt final media/checksum leaves canonical state unchanged.
 
 - [ ] **Step 5: Diagnostics privacy E2E**
 
-Trigger representative errors containing sensitive fixture strings internally; exported diagnostics must not contain those sensitive strings.
+Trigger errors with sensitive fixture strings; exported diagnostics must not contain them.
 
 - [ ] **Step 6: Commit**
 
@@ -560,15 +502,15 @@ Run Supabase function/SQL tests.
 
 - [ ] **Step 2: Run Codex Security focused scans**
 
-Scan import SSRF/parser, ZIP extraction/restore, account admin and diagnostic sanitization. Fix validated high/critical findings and any medium issue that violates explicit project invariants.
+Scan import SSRF/parser, archive parsing/staging/restore, account admin and diagnostic sanitization. Fix validated high/critical findings and any medium issue that violates explicit invariants.
 
-- [ ] **Step 3: Verify archive and logs contain no credentials**
+- [ ] **Step 3: Verify backup/diagnostic outputs contain no credentials**
 
-Search generated test backup/diagnostic outputs for known fixture tokens/passwords/e-mails. Expected: none.
+Search generated fixtures for known tokens/passwords/e-mails; expected none.
 
-- [ ] **Step 4: Update normative docs only with verified implementation specifics**
+- [ ] **Step 4: Update normative docs with verified implementation specifics**
 
-Touch `IMPORTING.md`, `BACKUP_RESTORE.md`, `ACCOUNT_LIFECYCLE.md`, `OBSERVABILITY.md` if runtime/package realities required exact documented behavior.
+Touch `IMPORTING.md`, `BACKUP_RESTORE.md`, `ACCOUNT_LIFECYCLE.md`, `OBSERVABILITY.md` when runtime/package facts require exact documentation.
 
 - [ ] **Step 5: Commit and mark plan complete**
 
