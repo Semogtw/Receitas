@@ -18,6 +18,7 @@ A interface deve continuar funcional sem conexão. O backend existe para autenti
 - **Autenticação:** Supabase Auth com e-mail e senha.
 - **Mídia:** Supabase Storage em buckets privados.
 - **Operações privilegiadas:** Supabase Edge Functions quando a lógica não deve residir no cliente.
+- **Arquivos de backup:** `@zip.js/zip.js`, gerados/lidos por streaming no cliente.
 - **Hospedagem do frontend:** Cloudflare Pages Free.
 - **Sync gerenciado:** PowerSync Cloud Free.
 - **Backend gerenciado:** Supabase Free.
@@ -45,18 +46,22 @@ Fluxo conceitual:
 ```text
 UI
  ↓
-Banco local
+Banco local PowerSync
  ↓
-Fila de mutações / sincronização
+CRUD queue + mutation_outbox semântico
  ↓
-PowerSync + Supabase
+PowerSync uploadData
  ↓
-Postgres remoto
+Edge Function sync-mutation
+ ↓
+Supabase Postgres
 ```
+
+O PowerSync continua responsável por persistência/sincronização local e sua fila CRUD. O `mutation_outbox` local-only adiciona a informação semântica que o produto precisa para preservar conflitos: `mutation_id`, entidade/ID, ator, `base_revision`, snapshot-base e payload local.
 
 A ausência de internet não deve bloquear ações normais como consultar receitas, editar dados já disponíveis, planejar refeições ou marcar itens da lista de compras.
 
-## 4. Escritas offline
+## 4. Escritas offline e aplicação remota
 
 Alterações feitas offline são persistidas localmente imediatamente e entram no fluxo de sincronização.
 
@@ -64,13 +69,33 @@ Princípios:
 
 - a interface não deve fingir que uma alteração foi enviada ao servidor quando ainda está apenas local;
 - o usuário pode continuar trabalhando enquanto a sincronização está pendente;
-- operações devem ser idempotentes sempre que possível;
+- entidades criadas offline recebem UUID estável antes de chegar ao servidor;
+- cada mutação editável registra a revisão/base conhecida sobre a qual foi criada;
+- payloads do outbox são representações JSON-safe de persistência, não objetos de runtime como `File`, `Blob` ou DOM;
+- cada mutação possui `mutation_id` estável para idempotência;
 - falhas transitórias de rede geram retry, não perda de dados;
-- estados de sincronização importantes devem ser observáveis pela interface;
-- entidades que precisam ser criadas offline recebem IDs estáveis antes de chegar ao servidor;
-- cada mutação editável deve carregar informação suficiente sobre a versão/base conhecida sobre a qual foi criada.
+- o PowerSync só conclui a transação CRUD depois de obter resultado remoto durável para todos os itens correspondentes;
+- ausência/corrupção do envelope semântico é erro de integridade, nunca autorização para cair em last-write-wins.
 
-A política detalhada de sincronização, retry, versionamento e conflitos está em [`SYNC.md`](./SYNC.md) e é normativa para a implementação.
+### 4.1 Dispatcher de mutações
+
+A Edge Function `sync-mutation` recebe somente tipos de entidade explicitamente permitidos.
+
+Ela:
+
+1. autentica o usuário;
+2. confirma associação ativa ao `pair_id`;
+3. rejeita tipo de entidade fora da allowlist;
+4. consulta `applied_mutations` pelo `mutation_id`;
+5. se já aplicado, retorna o resultado anterior sem repetir a escrita;
+6. se a revisão-base coincide, aplica a alteração e incrementa revisão;
+7. se a revisão divergiu, executa comparação base/local/remoto;
+8. auto-mescla somente alterações comprovadamente independentes;
+9. em incompatibilidade, grava `conflicts` antes de confirmar o resultado ao cliente.
+
+Nomes de tabela nunca são montados a partir de string arbitrária recebida do cliente; o dispatcher usa políticas/queries estáticas para cada tipo sincronizável.
+
+A política detalhada de sincronização, retry, versionamento e conflitos está em [`SYNC.md`](./SYNC.md) e é normativa para a implementação. O plano técnico correspondente está em `docs/superpowers/plans/2026-08-07-03-local-first-sync.md`.
 
 ## 5. Conflitos
 
@@ -82,7 +107,7 @@ Regra central:
 
 > **Auto-merge somente quando a combinação puder ser demonstrada como segura. Havendo ambiguidade semântica, preservar todas as versões e criar um conflito explícito.**
 
-Entidades editáveis devem carregar metadados suficientes para detectar que uma mutação foi produzida sobre uma base desatualizada.
+Entidades editáveis carregam metadados suficientes para detectar que uma mutação foi produzida sobre uma base desatualizada.
 
 Quando a alteração concorrente atingir campos ou entidades semanticamente independentes, o sistema pode mesclar automaticamente desde que a união seja determinística e não viole invariantes. Exemplos incluem avaliações pessoais distintas de um mesmo preparo e alterações em campos realmente independentes da receita.
 
@@ -108,7 +133,7 @@ Fluxo esperado:
 1. usuário seleciona/tira uma foto;
 2. o arquivo recebe uma referência local imediata;
 3. o registro relacionado pode ser salvo offline;
-4. a mídia entra em fila de upload;
+4. a mídia entra em fila durável de upload;
 5. quando online, o arquivo é enviado ao bucket privado;
 6. metadados locais/remotos são reconciliados;
 7. cópias locais podem continuar em cache conforme política de armazenamento.
@@ -160,7 +185,8 @@ O frontend nunca é considerado autoridade para autorização. Mesmo que alguém
 - buckets de fotos são privados;
 - acesso depende da associação ao par;
 - URLs públicas permanentes para conteúdo pessoal não são o padrão;
-- upload e leitura devem respeitar autorização equivalente à dos registros do banco.
+- upload e leitura devem respeitar autorização equivalente à dos registros do banco;
+- staging de restauração e backups de segurança também usam caminhos privados e vinculados ao par/job correto.
 
 ## 8. Formação fechada do par
 
@@ -180,15 +206,19 @@ O fechamento é uma invariante de backend. Esconder tela, rota ou botão não é
 
 ## 9. Edge Functions previstas
 
-Operações candidatas a funções privilegiadas:
+Operações privilegiadas previstas:
 
 - consumo do bootstrap inicial;
 - criação/aceitação de convite;
+- `sync-mutation` para aplicação idempotente/versionada das mutações sincronizadas;
 - importação de receita por URL;
-- geração e restauração de backup;
-- operações administrativas de exclusão definitiva;
+- validação/staging/commit de restauração de backup;
+- administração excepcional de identidade/membro;
+- operações administrativas de exclusão definitiva quando exigirem privilégio;
 - rotinas que precisem acessar segredos ou serviços externos;
 - validações de consistência que não possam ser confiadas ao cliente.
+
+**Geração/compactação do ZIP de backup não é uma Edge Function.** Ela acontece no cliente por streaming para evitar depender do limite de CPU das Edge Functions gratuitas e para aproveitar os dados já sincronizados/local-first.
 
 ## 10. Importação por URL
 
@@ -199,7 +229,7 @@ Fluxo preferido:
 ```text
 PWA envia URL
      ↓
-Edge Function valida e busca a página
+Edge Function valida DNS/IP e busca a página
      ↓
 parser tenta dados estruturados primeiro
      ↓
@@ -210,13 +240,13 @@ resultado estruturado retorna como rascunho
 usuário revisa antes de salvar
 ```
 
-A função deve aplicar proteções contra abuso de fetch do lado servidor, incluindo validação rigorosa de URL e prevenção de SSRF.
+A função aplica validação rigorosa de URL, proteção SSRF inclusive após resolução DNS e redirects, timeout, limite de bytes/content-type e parsing inerte sem execução de HTML/scripts externos.
 
 A especificação detalhada do importador está em [`IMPORTING.md`](./IMPORTING.md).
 
 ## 11. Backup e restauração
 
-Backups devem usar formato portável e independente do banco interno sempre que razoável.
+Backups usam formato portável e independente do banco interno sempre que razoável.
 
 Estrutura conceitual:
 
@@ -233,9 +263,48 @@ backup.zip
     └── ...
 ```
 
-Restauração deve validar versão do formato, integridade básica, associações e pertencimento antes de inserir dados.
+### 11.1 Geração do backup
 
-A restauração oferece os modos **Mesclar** e **Substituir tudo**. O segundo exige a geração e validação de um backup de segurança do estado atual antes de qualquer alteração destrutiva. A especificação normativa está em [`BACKUP_RESTORE.md`](./BACKUP_RESTORE.md).
+Um backup rotulado como completo só é gerado quando a fila de sincronização conhecida está drenada. Assim, ele representa uma cópia canônica consistente e não ignora mutações locais pendentes.
+
+Fluxo:
+
+```text
+snapshot local sincronizado
+      +
+originais baixados do Storage privado
+      ↓
+Zip.js por streams
+      ↓
+OPFS quando disponível
+      ↓
+arquivo .zip para download/compartilhamento
+```
+
+- JSONs pequenos podem ser comprimidos normalmente;
+- fotos/originais já comprimidos são armazenados no ZIP sem recompressão desnecessária;
+- cada entrada possui tamanho e SHA-256 no manifesto;
+- OPFS é preferido para não manter backups grandes inteiros na heap JS;
+- fallback por `Blob` existe apenas abaixo de um limite de memória testado; acima dele o app falha de modo explícito em vez de omitir mídia;
+- o backup nunca contém senha, sessão, token, segredo de bootstrap ou credencial de provedor.
+
+### 11.2 Restauração
+
+Restauração usa duas fases:
+
+1. **preflight/staging:** o cliente lê o ZIP por stream, valida localmente e envia dados/mídias em lotes para staging privado; cada lote é revalidado no servidor;
+2. **commit:** somente um job cujo manifesto inteiro, hashes, tamanhos, referências e regras de identidade passaram na validação fica `ready_to_commit`.
+
+Nenhuma linha canônica é alterada durante preflight.
+
+A restauração oferece:
+
+- **Mesclar:** IDs estáveis identificam entidades; dados idênticos não fazem nada, ausentes são inseridos e divergências reais usam o sistema normal de conflitos;
+- **Substituir tudo:** antes do commit destrutivo, o cliente gera automaticamente um backup completo do estado atual, o torna disponível ao usuário, envia a mesma cópia para staging privado e o servidor exige que esse safety backup também esteja validado.
+
+Mídias validadas podem ser promovidas/copied para chaves finais antes da transação estruturada; se a transação falhar, objetos órfãos permanecem não referenciados e entram em limpeza de job, sem produzir estado canônico parcial.
+
+A especificação normativa está em [`BACKUP_RESTORE.md`](./BACKUP_RESTORE.md). O plano técnico detalhado está em `docs/superpowers/plans/2026-08-07-06-import-backup-diagnostics.md`.
 
 ## 12. Exclusão lógica
 
@@ -292,11 +361,12 @@ Build ou typecheck isolados não são suficientes para considerar uma feature co
 - Sem segredo de bootstrap no frontend.
 - Sem backend de autorização implementado apenas no frontend.
 - Sem banco remoto como dependência para toda renderização.
-- Sem sincronização própria improvisada quando PowerSync cobrir o caso com confiabilidade.
 - Sem sobrescrita silenciosa de conflitos reais.
 - Sem auto-merge quando for necessário interpretar intenção humana.
+- Sem caminho de escrita de domínio que contorne o envelope versionado/dispatcher de mutação.
 - Sem uploads públicos por padrão.
 - Sem depender do cache local como única cópia de mídia sincronizada.
 - Sem arquitetura multi-tenant genérica para vários pares.
 - Sem serviço pago obrigatório.
 - Sem keep-alive artificial apenas para contornar hibernação de plano gratuito.
+- Sem gerar backups completos em runtime servidor quando o streaming client-side cumpre o requisito com menor custo/risco operacional.
