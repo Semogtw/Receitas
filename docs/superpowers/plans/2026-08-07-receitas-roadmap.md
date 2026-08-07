@@ -4,9 +4,9 @@
 
 **Goal:** Implement the complete private, local-first recipe PWA described in `docs/superpowers/specs/2026-08-07-receitas-design.md` without reducing the approved product scope.
 
-**Architecture:** Build a React + TypeScript + Vite PWA whose UI reads from a local PowerSync-backed database, synchronizes with Supabase Postgres, stores private media in Supabase Storage, and delegates privileged operations to Supabase Edge Functions. Ship the static frontend on Cloudflare Pages Free and preserve the project-wide recurring-cost requirement of US$ 0.
+**Architecture:** Build a React + TypeScript + Vite PWA whose UI reads from a local PowerSync-backed database, synchronizes with Supabase Postgres, stores private media in Supabase Storage, delegates privileged operations to Supabase Edge Functions, and creates portable backup archives client-side from a synchronized local snapshot plus authenticated media streams. Ship the static frontend on Cloudflare Pages Free and preserve the project-wide recurring-cost requirement of US$ 0.
 
-**Tech Stack:** React, TypeScript, Vite, pnpm, PowerSync, Supabase Postgres/Auth/Storage/Edge Functions, Vitest, Testing Library, Playwright, Cloudflare Pages.
+**Tech Stack:** React, TypeScript, Vite, pnpm, PowerSync, Supabase Postgres/Auth/Storage/Edge Functions, Zip.js, Vitest, Testing Library, Playwright, Cloudflare Pages.
 
 ## Global Constraints
 
@@ -41,10 +41,10 @@ The approved design spans multiple independently reviewable systems. A single im
 ├── playwright.config.ts
 ├── index.html
 ├── public/
-│   ├── icons/
-│   └── manifest.webmanifest
+│   ├── logo.svg
+│   └── generated PWA icons/assets
 ├── src/
-│   ├── app/                 # app shell, router, providers, auth gate, PWA update UI
+│   ├── app/                 # shell, providers, routing, bootstrap de UI
 │   ├── components/          # shared accessible primitives only after proven reuse
 │   ├── data/                # PowerSync database, schema, repositories, outbox/sync state
 │   ├── features/
@@ -57,19 +57,19 @@ The approved design spans multiple independently reviewable systems. A single im
 │   │   ├── search/
 │   │   ├── conflicts/
 │   │   ├── imports/
-│   │   ├── backups/
+│   │   ├── backups/        # Zip.js export, validation and restore staging client
 │   │   └── diagnostics/
 │   ├── lib/                 # narrowly scoped clients/helpers
 │   ├── styles/              # tokens, themes, base CSS
-│   └── test/                # shared test setup and fixtures
+│   └── test/                # shared test setup
 ├── supabase/
 │   ├── migrations/
 │   ├── functions/
 │   │   ├── bootstrap/
 │   │   ├── pair-invite/
+│   │   ├── sync-mutation/
 │   │   ├── import-recipe/
-│   │   ├── backup-export/
-│   │   ├── backup-restore/
+│   │   ├── backup-restore/ # bounded staging/preflight/commit, not ZIP assembly
 │   │   └── account-admin/
 │   └── tests/               # SQL/RLS/invariant tests
 ├── tests/
@@ -98,7 +98,7 @@ The approved design spans multiple independently reviewable systems. A single im
    Produces meal planner, multiple named shopping lists, conservative ingredient consolidation, local search/filter/sort and derived recipe states. Depends on plans 03–04.
 
 6. **`2026-08-07-06-import-backup-diagnostics.md`**  
-   Produces secure recipe import, backup export/restore, diagnostics export and privacy-preserving error handling. Depends on plans 02–05.
+   Produces secure recipe import, client-side streaming backup export, fully validated staged merge/replace restoration, diagnostics export and privacy-preserving error handling. Depends on plans 02–05.
 
 7. **`2026-08-07-07-hardening-deploy-release.md`**  
    Produces complete regression gates, security review, accessibility/PWA verification, Cloudflare Pages deployment, Supabase/PowerSync operational runbooks and release acceptance. Depends on all prior plans.
@@ -145,7 +145,7 @@ export interface ConflictRecord<T = unknown> {
 }
 ```
 
-All timestamps crossing persistence boundaries are ISO-8601 UTC strings. Client-created syncable entities use stable UUIDs before first remote write.
+All timestamps crossing persistence boundaries are ISO-8601 UTC strings. Client-created syncable entities use stable UUIDs before first remote write. Mutation payloads are JSON-safe persistence representations; domain-only values are converted at repository boundaries.
 
 ## Execution policy
 
@@ -155,7 +155,8 @@ All timestamps crossing persistence boundaries are ISO-8601 UTC strings. Client-
 - Use rendered browser QA for non-trivial UI changes; a passing build is not enough.
 - If a required external service cannot be provisioned in the execution environment, implement and test everything possible with local/test doubles, document the blocked integration gate, commit, and continue to the next code-resolvable task.
 - Do not use GitHub Actions as the primary local test runner; use them only when needed for a deployment/repository gate.
+- Before implementing a plan, re-read `docs/superpowers/STATUS.md`, `docs/DEVELOPMENT_WORKFLOW.md`, `docs/TOOLS_AND_PLUGINS.md`, this roadmap and the active plan.
 
 ## Completion gate
 
-The roadmap is complete only when all seven plans are checked off, the acceptance criteria in the final design spec are satisfied, the security review has no unresolved high/critical findings, and the zero-cost deployment/runbook is documented and reproducible.
+The roadmap is complete only when all seven plans are checked off, the acceptance criteria in the final design spec are satisfied, the security review has no unresolved high/critical findings, the backup/restore disaster-recovery drill succeeds, and the zero-cost deployment/runbook is documented and reproducible.
