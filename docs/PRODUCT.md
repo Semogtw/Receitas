@@ -117,18 +117,22 @@ Um preparo pode conter:
 - data e horário;
 - porções preparadas;
 - avaliações individuais dos dois membros;
-- observações;
+- comentários individuais vinculados às avaliações;
+- uma observação compartilhada opcional do preparo;
 - fotos específicas daquele preparo;
 - referência à versão/snapshot da receita usada naquela ocasião.
 
-### 6.1 Avaliação do preparo
+### 6.1 Avaliação e comentários do preparo
 
 - **Cada membro avalia individualmente o mesmo preparo.** Não existe uma única nota compartilhada que sobrescreva opiniões diferentes.
 - Cada avaliação usa escala de **0 a 10**.
 - São aceitos incrementos de **0,5 ponto**: por exemplo, 7; 7,5; 8; 8,5; 9.
 - Cada membro pode ter no máximo uma avaliação ativa por preparo, podendo editar a própria nota posteriormente sem alterar a avaliação do outro membro.
-- A nota pertence ao preparo específico, e não substitui avaliações de preparos anteriores.
-- O preparo também pode conter comentário/observação livre compartilhado, independentemente das notas individuais.
+- Cada avaliação individual pode conter um **comentário pessoal opcional**, visível no histórico como opinião daquele membro.
+- O comentário individual de um membro não altera nem substitui o comentário individual do outro.
+- O preparo pode conter também uma **observação compartilhada opcional**, destinada a decisões conjuntas ou anotações práticas como “da próxima vez usar menos molho”.
+- Comentários individuais e observação compartilhada são conceitos distintos e devem aparecer separados na interface.
+- A nota pertence ao preparo específico e não substitui avaliações de preparos anteriores.
 - A interface pode calcular a **média daquele preparo** a partir das avaliações existentes.
 - A receita pode exibir agregados históricos, como média geral do par, média por pessoa e evolução das notas ao longo dos preparos, sempre preservando as avaliações individuais originais.
 - A ausência de nota de um dos membros não impede o registro do preparo nem invalida a nota do outro.
@@ -229,7 +233,7 @@ O aplicativo deve permitir exportar um backup completo contendo, no mínimo:
 - categorias;
 - ingredientes;
 - etapas;
-- histórico de preparos e avaliações individuais;
+- histórico de preparos, avaliações, comentários individuais e observações compartilhadas;
 - planejamento;
 - lista de compras e metadados relevantes;
 - preferências e perfis de conversão personalizados;
