@@ -116,18 +116,22 @@ Um preparo pode conter:
 
 - data e horário;
 - porções preparadas;
-- nota/avaliação;
+- avaliações individuais dos dois membros;
 - observações;
 - fotos específicas daquele preparo;
 - referência à versão/snapshot da receita usada naquela ocasião.
 
 ### 6.1 Avaliação do preparo
 
-- A avaliação usa escala de **0 a 10**.
+- **Cada membro avalia individualmente o mesmo preparo.** Não existe uma única nota compartilhada que sobrescreva opiniões diferentes.
+- Cada avaliação usa escala de **0 a 10**.
 - São aceitos incrementos de **0,5 ponto**: por exemplo, 7; 7,5; 8; 8,5; 9.
-- A nota pertence ao preparo específico, e não substitui o histórico de avaliações anteriores.
-- O preparo também pode conter comentário/observação livre, independentemente da nota.
-- A interface pode calcular e exibir agregados da receita, como média das avaliações, sem perder as notas individuais.
+- Cada membro pode ter no máximo uma avaliação ativa por preparo, podendo editar a própria nota posteriormente sem alterar a avaliação do outro membro.
+- A nota pertence ao preparo específico, e não substitui avaliações de preparos anteriores.
+- O preparo também pode conter comentário/observação livre compartilhado, independentemente das notas individuais.
+- A interface pode calcular a **média daquele preparo** a partir das avaliações existentes.
+- A receita pode exibir agregados históricos, como média geral do par, média por pessoa e evolução das notas ao longo dos preparos, sempre preservando as avaliações individuais originais.
+- A ausência de nota de um dos membros não impede o registro do preparo nem invalida a nota do outro.
 
 O histórico deve preservar o contexto do passado mesmo que a receita seja editada posteriormente.
 
@@ -225,7 +229,7 @@ O aplicativo deve permitir exportar um backup completo contendo, no mínimo:
 - categorias;
 - ingredientes;
 - etapas;
-- histórico de preparos;
+- histórico de preparos e avaliações individuais;
 - planejamento;
 - lista de compras e metadados relevantes;
 - preferências e perfis de conversão personalizados;
