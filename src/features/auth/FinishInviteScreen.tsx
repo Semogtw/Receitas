@@ -8,7 +8,6 @@ export function FinishInviteScreen() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const kind: InviteKind = params.get('kind') === 'pair' ? 'pair' : 'bootstrap'
-  const pairToken = params.get('pair_invite')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -19,16 +18,19 @@ export function FinishInviteScreen() {
   if (auth.status === 'ready') return <Navigate to="/recipes" replace />
 
   async function submit(event: FormEvent) {
-    event.preventDefault(); setError(null)
+    event.preventDefault()
+    setError(null)
     if (password !== confirm) { setError('As senhas não coincidem.'); return }
     setSubmitting(true)
     try {
-      await completeInvitation({ kind, password, pairInviteToken: pairToken })
+      await completeInvitation({ kind, password })
       await auth.refreshAuth()
       navigate('/recipes', { replace: true })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível concluir o convite.')
-    } finally { setSubmitting(false) }
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
