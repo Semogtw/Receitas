@@ -17,8 +17,10 @@
     "lint": "eslint . --max-warnings=0"
   },
   "dependencies": {
+    "lucide-react": "^1.27.0",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "react-router": "^8.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
