@@ -30,6 +30,7 @@ Este projeto **não** é uma plataforma multiusuário, não possui grupos públi
 - [`docs/BACKUP_RESTORE.md`](docs/BACKUP_RESTORE.md) — exportação, validação e modos de restauração.
 - [`docs/MEDIA_STORAGE.md`](docs/MEDIA_STORAGE.md) — mídia local-first, cache e disponibilidade offline.
 - [`docs/COOKING_MODE.md`](docs/COOKING_MODE.md) — ciclo de vida do modo cozinha e preparos em andamento.
+- [`docs/SHOPPING_LISTS.md`](docs/SHOPPING_LISTS.md) — múltiplas listas de compras nomeadas, lista padrão e geração de itens.
 - [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md) — regras de continuidade do desenvolvimento, incluindo uso de **@Build Web Apps sempre que trouxer benefício real** e a decisão explícita de **não usar ImageGen no fluxo visual sem nova autorização do usuário**.
 
 A documentação é atualizada conforme as decisões de produto são aprovadas, para evitar depender apenas do histórico da conversa.
