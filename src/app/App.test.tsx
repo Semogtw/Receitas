@@ -2,6 +2,12 @@ import type { ReactNode } from 'react'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
+const fakeDatabase = {
+  getAll: vi.fn(async () => []),
+  getOptional: vi.fn(async () => null),
+  registerListener: vi.fn(() => vi.fn()),
+}
+
 vi.mock('../features/auth/AuthProvider', () => ({
   AuthProvider: ({ children }: { children: ReactNode }) => children,
   useAuth: () => ({
@@ -15,6 +21,8 @@ vi.mock('../features/auth/AuthProvider', () => ({
 }))
 vi.mock('../data/PowerSyncProvider', () => ({
   PowerSyncProvider: ({ children }: { children: ReactNode }) => children,
+  usePowerSyncDatabase: () => fakeDatabase,
+  useOptionalPowerSyncDatabase: () => fakeDatabase,
 }))
 vi.mock('../data/sync/SyncRuntimeProvider', () => ({
   SyncRuntimeProvider: ({ children }: { children: ReactNode }) => children,
