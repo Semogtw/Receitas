@@ -10,7 +10,7 @@ const fakes = vi.hoisted(() => ({
   createRecipe: vi.fn(),
   updateRecipe: vi.fn(),
   softDeleteRecipe: vi.fn(),
-  registerListener: vi.fn(() => vi.fn()),
+  registerListener: vi.fn((_listener: { crudUpdate(): void }) => vi.fn()),
 }))
 
 vi.mock('../../features/auth/AuthProvider', () => ({
@@ -76,8 +76,8 @@ describe('RecipesRoute', () => {
     const user = userEvent.setup()
     render(<RecipesRoute />)
 
-    expect(await screen.findByRole('button', { name: /Bolo simples/ })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Bolo simples/ }))
+    expect(await screen.findByRole('button', { name: /Abrir Bolo simples/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Abrir Bolo simples/ }))
 
     expect(await screen.findByRole('heading', { name: 'Bolo simples' })).toBeInTheDocument()
     expect(fakes.getRecipe).toHaveBeenCalledWith(recipeId)
@@ -98,13 +98,13 @@ describe('RecipesRoute', () => {
 
   it('subscribes to database changes so remote replication refreshes the local library', async () => {
     render(<RecipesRoute />)
-    await screen.findByRole('button', { name: /Bolo simples/ })
+    await screen.findByRole('button', { name: /Abrir Bolo simples/ })
 
     expect(fakes.registerListener).toHaveBeenCalledTimes(1)
     const listener = fakes.registerListener.mock.calls[0]?.[0]
     fakes.listRecipes.mockResolvedValue([{ ...summary, title: 'Bolo sincronizado' }])
-    listener.crudUpdate()
+    listener?.crudUpdate()
 
-    expect(await screen.findByRole('button', { name: /Bolo sincronizado/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Abrir Bolo sincronizado/ })).toBeInTheDocument()
   })
 })
