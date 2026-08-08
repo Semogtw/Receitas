@@ -170,6 +170,8 @@ function mapIngredient(row: IngredientRow): RecipeIngredient {
     name: requiredString(row.ingredient_name, 'Ingredient name'),
     normalizedName: requiredString(row.normalized_name, 'Ingredient normalized_name'),
     note: nullableString(row.note),
+    isApproximate: Number(row.is_approximate ?? 0) === 1,
+    isOptional: Number(row.is_optional ?? 0) === 1,
   }
 }
 
