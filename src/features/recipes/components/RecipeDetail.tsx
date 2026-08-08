@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
 import { formatAmount } from '../domain/amount'
 import { scaleRecipeIngredients } from '../domain/scaling'
-import type { Rational } from '../domain/types'
+import type { ConversionProfile, Rational } from '../domain/types'
 import type { RecipeAggregate } from '../data/recipe-repository'
 import { ServingControl } from './ServingControl'
+import { UnitConversionControl } from './UnitConversionControl'
 
 interface RecipeDetailProps {
   recipe: RecipeAggregate
+  conversionProfiles?: readonly ConversionProfile[]
   onEdit(): void
   onDelete(): void | Promise<void>
   onBack?: () => void
@@ -23,7 +25,7 @@ function timeLabel(seconds: number | null): string | null {
   return rest > 0 ? `${hours} h ${rest} min` : `${hours} h`
 }
 
-export function RecipeDetail({ recipe, onEdit, onDelete, onBack }: RecipeDetailProps) {
+export function RecipeDetail({ recipe, conversionProfiles = [], onEdit, onDelete, onBack }: RecipeDetailProps) {
   const [multiplier, setMultiplier] = useState<Rational>(identityMultiplier)
   const ingredients = useMemo(
     () => scaleRecipeIngredients(recipe.ingredients, multiplier),
@@ -79,9 +81,17 @@ export function RecipeDetail({ recipe, onEdit, onDelete, onBack }: RecipeDetailP
               const main = [amount, ingredient.unit, ingredient.name].filter(Boolean).join(' ')
               return (
                 <li key={ingredient.id}>
-                  <div>
+                  <div className="recipe-ingredient-list__content">
                     <span className="recipe-ingredient-list__main">{main}</span>
                     {ingredient.note ? <span className="recipe-ingredient-list__note">{ingredient.note}</span> : null}
+                    {ingredient.unit && ingredient.amount.kind === 'numeric' ? (
+                      <UnitConversionControl
+                        amount={ingredient.amount}
+                        unit={ingredient.unit}
+                        ingredientKey={ingredient.normalizedName || ingredient.name}
+                        pairOverrides={conversionProfiles}
+                      />
+                    ) : null}
                   </div>
                   <div className="recipe-ingredient-list__flags">
                     {ingredient.isApproximate ? <span>Aproximado</span> : null}
