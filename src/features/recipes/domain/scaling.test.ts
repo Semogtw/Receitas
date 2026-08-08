@@ -11,13 +11,17 @@ const ingredient: RecipeIngredient = {
   name: 'Farinha',
   normalizedName: 'farinha',
   note: null,
+  isApproximate: true,
+  isOptional: false,
 }
 
 describe('recipe serving scaling', () => {
-  it('scales numeric quantities by exact rational multipliers', () => {
-    expect(scaleIngredient(ingredient, { numerator: 1, denominator: 2 }).amount).toEqual({
+  it('scales numeric quantities by exact rational multipliers without changing editing flags', () => {
+    const half = scaleIngredient(ingredient, { numerator: 1, denominator: 2 })
+    expect(half.amount).toEqual({
       kind: 'numeric', value: { numerator: 3, denominator: 4 },
     })
+    expect(half).toMatchObject({ isApproximate: true, isOptional: false })
     expect(scaleIngredient(ingredient, { numerator: 3, denominator: 2 }).amount).toEqual({
       kind: 'numeric', value: { numerator: 9, denominator: 4 },
     })
