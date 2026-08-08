@@ -67,6 +67,15 @@ function canonicalUnit(value: string): string | null {
   return UNIT_ALIASES[value.trim().toLocaleLowerCase('pt-BR')] ?? null
 }
 
+function normalizeIngredientKey(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase('pt-BR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+}
+
 function decimalNumberToRational(value: number): Rational {
   if (!Number.isFinite(value) || value <= 0) {
     throw new Error('Conversion density must be a finite number greater than zero')
@@ -84,17 +93,17 @@ function convertWithinDimension(value: Rational, from: UnitDefinition, to: UnitD
 }
 
 function findDensityProfile(input: ConvertAmountInput): ConversionProfile | null {
-  const ingredientKey = input.ingredientKey?.trim().toLocaleLowerCase('pt-BR')
+  const ingredientKey = input.ingredientKey ? normalizeIngredientKey(input.ingredientKey) : ''
   if (!ingredientKey) return null
 
   const pair = input.pairOverrides?.find(
-    (profile) => profile.ingredientKey.trim().toLocaleLowerCase('pt-BR') === ingredientKey,
+    (profile) => normalizeIngredientKey(profile.ingredientKey) === ingredientKey,
   )
   if (pair) return pair
 
   const defaults = input.defaultProfiles ?? DEFAULT_CONVERSION_PROFILES
   return defaults.find(
-    (profile) => profile.ingredientKey.trim().toLocaleLowerCase('pt-BR') === ingredientKey,
+    (profile) => normalizeIngredientKey(profile.ingredientKey) === ingredientKey,
   ) ?? null
 }
 
