@@ -5,6 +5,7 @@ import './styles/tokens.css'
 import './styles/themes.css'
 import './styles/base.css'
 import './styles/auth.css'
+import './styles/recipes.css'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('Application root element is missing')
