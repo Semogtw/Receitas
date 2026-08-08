@@ -2,8 +2,8 @@ import type { PowerSyncDatabase } from '@powersync/web'
 import { createMutationEnvelope, type JsonObject, type MutationEnvelope } from '../../../data/mutations/types'
 import { performLocalMutation } from '../../../data/mutations/performLocalMutation'
 import { resolveMutationBase } from '../../../data/mutations/resolveMutationBase'
-import { normalizeRational, serializeIngredientAmount } from '../domain/amount'
-import type { IngredientAmount, Rational } from '../domain/types'
+import { deserializeIngredientAmount, normalizeRational, serializeIngredientAmount } from '../domain/amount'
+import type { IngredientAmount, Rational, RecipeIngredient, RecipeStep } from '../domain/types'
 
 export interface RecipeRepositoryScope {
   pairId: string
@@ -39,6 +39,26 @@ export interface RecipeDraft {
   wantToMake: boolean
   ingredients: RecipeDraftIngredient[]
   steps: RecipeDraftStep[]
+}
+
+export interface RecipeSummary {
+  id: string
+  title: string
+  description: string | null
+  favorite: boolean
+  wantToMake: boolean
+  baseYield: Rational | null
+  baseYieldUnit: string | null
+  prepTimeSeconds: number | null
+  cookTimeSeconds: number | null
+  totalTimeSeconds: number | null
+  updatedAt: string
+}
+
+export interface RecipeAggregate extends RecipeSummary {
+  revision: number
+  ingredients: RecipeIngredient[]
+  steps: RecipeStep[]
 }
 
 interface RecipeRow extends Record<string, unknown> { id: string }
@@ -88,6 +108,80 @@ function asJsonObject(row: Record<string, unknown>): JsonObject {
     }
   }
   return payload
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === 'number' ? value : null
+}
+
+function requiredNumber(value: unknown, label: string): number {
+  if (typeof value !== 'number') throw new Error(`${label} must be numeric in the local database`)
+  return value
+}
+
+function requiredString(value: unknown, label: string): string {
+  if (typeof value !== 'string') throw new Error(`${label} must be text in the local database`)
+  return value
+}
+
+function rationalFromColumns(numerator: unknown, denominator: unknown): Rational | null {
+  if (numerator === null || numerator === undefined) {
+    if (denominator !== null && denominator !== undefined) throw new Error('Rational persistence columns must be present together')
+    return null
+  }
+  if (denominator === null || denominator === undefined) throw new Error('Rational persistence columns must be present together')
+  return normalizeRational({
+    numerator: requiredNumber(numerator, 'Rational numerator'),
+    denominator: requiredNumber(denominator, 'Rational denominator'),
+  })
+}
+
+function mapRecipeSummary(row: RecipeRow): RecipeSummary {
+  return {
+    id: row.id,
+    title: requiredString(row.title, 'Recipe title'),
+    description: nullableString(row.description),
+    favorite: Number(row.favorite ?? 0) === 1,
+    wantToMake: Number(row.want_to_make ?? 0) === 1,
+    baseYield: rationalFromColumns(row.base_yield_numerator, row.base_yield_denominator),
+    baseYieldUnit: nullableString(row.base_yield_unit),
+    prepTimeSeconds: nullableNumber(row.prep_time_seconds),
+    cookTimeSeconds: nullableNumber(row.cook_time_seconds),
+    totalTimeSeconds: nullableNumber(row.total_time_seconds),
+    updatedAt: requiredString(row.updated_at, 'Recipe updated_at'),
+  }
+}
+
+function mapIngredient(row: IngredientRow): RecipeIngredient {
+  return {
+    id: row.id,
+    recipeId: requiredString(row.recipe_id, 'Ingredient recipe_id'),
+    position: requiredNumber(row.position, 'Ingredient position'),
+    amount: deserializeIngredientAmount({
+      quantityNum: nullableNumber(row.quantity_numerator),
+      quantityDen: nullableNumber(row.quantity_denominator),
+      quantityText: nullableString(row.quantity_text),
+    }),
+    unit: nullableString(row.unit),
+    name: requiredString(row.ingredient_name, 'Ingredient name'),
+    normalizedName: requiredString(row.normalized_name, 'Ingredient normalized_name'),
+    note: nullableString(row.note),
+  }
+}
+
+function mapStep(row: StepRow): RecipeStep {
+  return {
+    id: row.id,
+    recipeId: requiredString(row.recipe_id, 'Step recipe_id'),
+    position: requiredNumber(row.position, 'Step position'),
+    instruction: requiredString(row.instruction, 'Step instruction'),
+    durationSeconds: nullableNumber(row.duration_seconds),
+    note: nullableString(row.observation),
+  }
 }
 
 function validateDraft(draft: RecipeDraft): void {
@@ -221,6 +315,40 @@ export class RecipeRepository {
     private readonly scope: RecipeRepositoryScope,
     private readonly writeMutation: MutationWriter = performLocalMutation,
   ) {}
+
+  async listRecipes(): Promise<RecipeSummary[]> {
+    const rows = await this.database.getAll<RecipeRow>(
+      'SELECT * FROM recipes WHERE pair_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC',
+      [this.scope.pairId],
+    )
+    return rows.map(mapRecipeSummary)
+  }
+
+  async getRecipe(recipeId: string): Promise<RecipeAggregate | null> {
+    const recipeRow = await this.database.getOptional<RecipeRow>(
+      'SELECT * FROM recipes WHERE id = ? AND pair_id = ? AND deleted_at IS NULL LIMIT 1',
+      [recipeId, this.scope.pairId],
+    )
+    if (!recipeRow) return null
+
+    const [ingredientRows, stepRows] = await Promise.all([
+      this.database.getAll<IngredientRow>(
+        'SELECT * FROM recipe_ingredients WHERE recipe_id = ? AND pair_id = ? AND deleted_at IS NULL ORDER BY position ASC',
+        [recipeId, this.scope.pairId],
+      ),
+      this.database.getAll<StepRow>(
+        'SELECT * FROM recipe_steps WHERE recipe_id = ? AND pair_id = ? AND deleted_at IS NULL ORDER BY position ASC',
+        [recipeId, this.scope.pairId],
+      ),
+    ])
+
+    return {
+      ...mapRecipeSummary(recipeRow),
+      revision: requiredNumber(recipeRow.revision, 'Recipe revision'),
+      ingredients: ingredientRows.map(mapIngredient),
+      steps: stepRows.map(mapStep),
+    }
+  }
 
   async createRecipe(draft: RecipeDraft): Promise<string> {
     validateDraft(draft)
