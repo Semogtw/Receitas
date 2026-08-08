@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const recipeId = '40000000-0000-4000-8000-000000000004'
+const categoryId = '70000000-0000-4000-8000-000000000007'
 
 const fakes = vi.hoisted(() => ({
   listRecipes: vi.fn(),
@@ -10,6 +11,10 @@ const fakes = vi.hoisted(() => ({
   createRecipe: vi.fn(),
   updateRecipe: vi.fn(),
   softDeleteRecipe: vi.fn(),
+  listCategories: vi.fn(),
+  listRecipeCategoryIds: vi.fn(),
+  setRecipeCategories: vi.fn(),
+  listDensityProfiles: vi.fn(),
   registerListener: vi.fn((_listener: { crudUpdate(): void }) => vi.fn()),
 }))
 
@@ -35,6 +40,28 @@ vi.mock('../../features/recipes/data/recipe-repository', async (importOriginal) 
       createRecipe = fakes.createRecipe
       updateRecipe = fakes.updateRecipe
       softDeleteRecipe = fakes.softDeleteRecipe
+    },
+  }
+})
+
+vi.mock('../../features/recipes/data/category-repository', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../features/recipes/data/category-repository')>()
+  return {
+    ...actual,
+    CategoryRepository: class {
+      listCategories = fakes.listCategories
+      listRecipeCategoryIds = fakes.listRecipeCategoryIds
+      setRecipeCategories = fakes.setRecipeCategories
+    },
+  }
+})
+
+vi.mock('../../features/recipes/data/conversion-profile-repository', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../features/recipes/data/conversion-profile-repository')>()
+  return {
+    ...actual,
+    ConversionProfileRepository: class {
+      listDensityProfiles = fakes.listDensityProfiles
     },
   }
 })
@@ -70,6 +97,10 @@ describe('RecipesRoute', () => {
     fakes.createRecipe.mockResolvedValue(recipeId)
     fakes.updateRecipe.mockResolvedValue(undefined)
     fakes.softDeleteRecipe.mockResolvedValue(undefined)
+    fakes.listCategories.mockResolvedValue([{ id: categoryId, name: 'Sobremesas' }])
+    fakes.listRecipeCategoryIds.mockResolvedValue([categoryId])
+    fakes.setRecipeCategories.mockResolvedValue(undefined)
+    fakes.listDensityProfiles.mockResolvedValue([])
   })
 
   it('loads the local recipe library and opens a recipe detail', async () => {
@@ -81,19 +112,25 @@ describe('RecipesRoute', () => {
 
     expect(await screen.findByRole('heading', { name: 'Bolo simples' })).toBeInTheDocument()
     expect(fakes.getRecipe).toHaveBeenCalledWith(recipeId)
+    expect(fakes.listRecipeCategoryIds).toHaveBeenCalledWith(recipeId)
   })
 
-  it('creates a recipe locally and opens the newly saved aggregate', async () => {
+  it('creates a recipe locally and synchronizes category assignments separately', async () => {
     const user = userEvent.setup()
     render(<RecipesRoute />)
 
     await user.click(await screen.findByRole('button', { name: 'Nova receita' }))
     expect(screen.getByRole('heading', { name: 'Nova receita' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('Sobremesas')).toBeInTheDocument()
     await user.type(screen.getByLabelText('Título'), 'Nova receita offline')
+    await user.click(screen.getByLabelText('Sobremesas'))
     await user.click(screen.getByRole('button', { name: 'Salvar receita' }))
 
     await waitFor(() => expect(fakes.createRecipe).toHaveBeenCalledTimes(1))
-    expect(fakes.getRecipe).toHaveBeenCalledWith(expect.stringMatching(/^[0-9a-f-]{36}$/i))
+    const savedId = fakes.createRecipe.mock.calls[0]?.[0].id
+    expect(savedId).toMatch(/^[0-9a-f-]{36}$/i)
+    expect(fakes.setRecipeCategories).toHaveBeenCalledWith(savedId, [categoryId])
+    expect(fakes.getRecipe).toHaveBeenCalledWith(savedId)
   })
 
   it('subscribes to database changes so remote replication refreshes the local library', async () => {
