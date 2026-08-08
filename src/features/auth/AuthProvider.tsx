@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { getCachedDatabase } from '../../data/database'
+import { prepareLocalStateForLogout } from '../../data/session/local-session-policy'
 import { getSupabaseClient } from '../../lib/supabase/client'
 import {
   clearCachedAuthScope,
@@ -124,6 +126,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     signOut: async () => {
       const currentUserId = state.userId
+      const currentPairId = state.pairId
+
+      if (currentUserId && currentPairId) {
+        const database = getCachedDatabase({ userId: currentUserId, pairId: currentPairId })
+        if (database) {
+          try {
+            await prepareLocalStateForLogout(database)
+          } catch {
+            // Logout must remain available. The safe fallback is to leave local state untouched.
+          }
+        }
+      }
+
       const supabase = getSupabaseClient()
       const { error } = await supabase.auth.signOut({ scope: 'local' })
       if (error) throw error
@@ -137,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error
     },
     refreshAuth,
-  }), [refreshAuth, state.userId])
+  }), [refreshAuth, state.userId, state.pairId])
 
   return <AuthContext.Provider value={{ ...state, ...actions }}>{children}</AuthContext.Provider>
 }
