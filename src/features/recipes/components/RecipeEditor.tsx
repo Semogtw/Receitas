@@ -51,8 +51,8 @@ function initialIngredients(recipe?: RecipeAggregate | null): IngredientEditorVa
     unit: ingredient.unit ?? '',
     name: ingredient.name,
     note: ingredient.note ?? '',
-    isApproximate: false,
-    isOptional: false,
+    isApproximate: ingredient.isApproximate,
+    isOptional: ingredient.isOptional,
   })) ?? []
 }
 
