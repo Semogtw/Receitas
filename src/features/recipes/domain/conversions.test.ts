@@ -32,7 +32,7 @@ describe('culinary conversions', () => {
     ]
 
     expect(convertAmount({
-      amount: numeric(1), fromUnit: 'cup', toUnit: 'g', ingredientKey: 'agua', defaultProfiles: defaults,
+      amount: numeric(1), fromUnit: 'cup', toUnit: 'g', ingredientKey: 'ÁGUA', defaultProfiles: defaults,
     })).toEqual({
       status: 'converted', amount: numeric(240), approximate: true,
     })
