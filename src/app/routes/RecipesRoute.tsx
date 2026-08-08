@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { PowerSyncDatabase } from '@powersync/web'
 import { usePowerSyncDatabase } from '../../data/PowerSyncProvider'
 import { useAuth } from '../../features/auth/AuthProvider'
+import { CookingWorkspace } from '../../features/cooking/components/CookingWorkspace'
 import { RecipeDetail } from '../../features/recipes/components/RecipeDetail'
 import { RecipeEditor } from '../../features/recipes/components/RecipeEditor'
 import { CategoryRepository, type RecipeCategory } from '../../features/recipes/data/category-repository'
@@ -14,7 +15,7 @@ import {
   type RecipeSummary,
 } from '../../features/recipes/data/recipe-repository'
 
-type RecipesRouteMode = 'list' | 'create' | 'view' | 'edit'
+type RecipesRouteMode = 'list' | 'create' | 'view' | 'edit' | 'cook'
 
 function formatUpdatedAt(value: string): string {
   const date = new Date(value)
@@ -242,6 +243,20 @@ export function RecipesRoute() {
     )
   }
 
+  if (mode === 'cook' && selectedRecipe && auth.pairId && auth.userId) {
+    return (
+      <section className="recipes-workspace">
+        <CookingWorkspace
+          database={database}
+          pairId={auth.pairId}
+          actorUserId={auth.userId}
+          recipe={selectedRecipe}
+          onExit={() => setMode('view')}
+        />
+      </section>
+    )
+  }
+
   if (mode === 'view' && selectedRecipe) {
     return (
       <section className="recipes-workspace">
@@ -250,6 +265,7 @@ export function RecipesRoute() {
           recipe={selectedRecipe}
           conversionProfiles={conversionProfiles}
           onBack={() => { setSelectedRecipe(null); setSelectedCategoryIds([]); setMode('list') }}
+          onCook={() => setMode('cook')}
           onEdit={() => setMode('edit')}
           onDelete={() => setConfirmingDelete(true)}
         />
