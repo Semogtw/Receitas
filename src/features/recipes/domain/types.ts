@@ -17,6 +17,8 @@ export interface RecipeIngredient {
   name: string
   normalizedName: string
   note: string | null
+  isApproximate: boolean
+  isOptional: boolean
 }
 
 export interface RecipeStep {
