@@ -11,7 +11,7 @@ function databaseFixture() {
     id: recipeId, pair_id: pairId, revision: 2, title: 'Bolo', description: 'Fofo',
     base_yield_numerator: 4, base_yield_denominator: 1, base_yield_unit: 'porções',
     prep_time_seconds: 600, cook_time_seconds: 1800, total_time_seconds: 2400,
-    favorite: 1, want_to_make: 0, source_kind: 'manual', source_url: null,
+    favorite: 1, want_to_make: 0, already_made: 1, source_kind: 'manual', source_url: null,
     created_by: actorUserId, created_at: '2026-08-07T20:00:00.000Z', updated_at: '2026-08-07T21:00:00.000Z', deleted_at: null,
   }
   const ingredient = {
@@ -39,7 +39,7 @@ function databaseFixture() {
 }
 
 describe('RecipeRepository reads', () => {
-  it('maps persisted recipe rows back to exact domain amounts and editing flags', async () => {
+  it('maps persisted recipe rows back to exact domain amounts, editing flags and derived history state', async () => {
     const repository = new RecipeRepository(databaseFixture(), { pairId, actorUserId })
 
     const recipe = await repository.getRecipe(recipeId)
@@ -47,6 +47,7 @@ describe('RecipeRepository reads', () => {
     expect(recipe).not.toBeNull()
     expect(recipe?.title).toBe('Bolo')
     expect(recipe?.favorite).toBe(true)
+    expect(recipe?.alreadyMade).toBe(true)
     expect(recipe?.baseYield).toEqual({ numerator: 4, denominator: 1 })
     expect(recipe?.ingredients[0]).toMatchObject({
       amount: { kind: 'numeric', value: { numerator: 3, denominator: 2 } },
@@ -56,11 +57,14 @@ describe('RecipeRepository reads', () => {
     expect(recipe?.steps[0]).toMatchObject({ instruction: 'Misture.', note: 'Sem bater demais', durationSeconds: 120 })
   })
 
-  it('lists only the lightweight active recipe fields needed by the library route', async () => {
-    const repository = new RecipeRepository(databaseFixture(), { pairId, actorUserId })
+  it('lists active recipes with already-made derived from active cooking sessions', async () => {
+    const database = databaseFixture()
+    const repository = new RecipeRepository(database, { pairId, actorUserId })
 
     await expect(repository.listRecipes()).resolves.toEqual([
-      expect.objectContaining({ id: recipeId, title: 'Bolo', favorite: true, wantToMake: false }),
+      expect.objectContaining({ id: recipeId, title: 'Bolo', favorite: true, wantToMake: false, alreadyMade: true }),
     ])
+    expect(vi.mocked(database.getAll).mock.calls[0]?.[0]).toContain('EXISTS')
+    expect(vi.mocked(database.getAll).mock.calls[0]?.[0]).toContain('cooking_sessions')
   })
 })
