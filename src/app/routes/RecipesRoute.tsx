@@ -4,6 +4,9 @@ import { usePowerSyncDatabase } from '../../data/PowerSyncProvider'
 import { useAuth } from '../../features/auth/AuthProvider'
 import { RecipeDetail } from '../../features/recipes/components/RecipeDetail'
 import { RecipeEditor } from '../../features/recipes/components/RecipeEditor'
+import { CategoryRepository, type RecipeCategory } from '../../features/recipes/data/category-repository'
+import { ConversionProfileRepository } from '../../features/recipes/data/conversion-profile-repository'
+import type { ConversionProfile } from '../../features/recipes/domain/types'
 import {
   RecipeRepository,
   type RecipeAggregate,
@@ -29,55 +32,82 @@ export function RecipesRoute() {
   const database = usePowerSyncDatabase()
   const [mode, setMode] = useState<RecipesRouteMode>('list')
   const [recipes, setRecipes] = useState<RecipeSummary[]>([])
+  const [categories, setCategories] = useState<RecipeCategory[]>([])
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([])
+  const [conversionProfiles, setConversionProfiles] = useState<ConversionProfile[]>([])
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeAggregate | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
-  const repository = useMemo(() => {
+  const repositories = useMemo(() => {
     if (!auth.userId || !auth.pairId) return null
-    return new RecipeRepository(database, { pairId: auth.pairId, actorUserId: auth.userId })
+    const scope = { pairId: auth.pairId, actorUserId: auth.userId }
+    return {
+      recipes: new RecipeRepository(database, scope),
+      categories: new CategoryRepository(database, scope),
+      conversions: new ConversionProfileRepository(database, scope),
+    }
   }, [auth.userId, auth.pairId, database])
 
   const refreshRecipes = useCallback(async () => {
-    if (!repository) return
-    const rows = await repository.listRecipes()
-    setRecipes(rows)
-  }, [repository])
+    if (!repositories) return
+    setRecipes(await repositories.recipes.listRecipes())
+  }, [repositories])
+
+  const refreshReferenceData = useCallback(async () => {
+    if (!repositories) return
+    const [nextCategories, nextProfiles] = await Promise.all([
+      repositories.categories.listCategories(),
+      repositories.conversions.listDensityProfiles(),
+    ])
+    setCategories(nextCategories)
+    setConversionProfiles(nextProfiles)
+  }, [repositories])
 
   const refreshSelected = useCallback(async () => {
-    if (!repository || !selectedRecipe) return
-    const next = await repository.getRecipe(selectedRecipe.id)
+    if (!repositories || !selectedRecipe) return
+    const [next, categoryIds] = await Promise.all([
+      repositories.recipes.getRecipe(selectedRecipe.id),
+      repositories.categories.listRecipeCategoryIds(selectedRecipe.id),
+    ])
     if (!next) {
       setSelectedRecipe(null)
+      setSelectedCategoryIds([])
       setMode('list')
       return
     }
     setSelectedRecipe(next)
-  }, [repository, selectedRecipe])
+    setSelectedCategoryIds(categoryIds)
+  }, [repositories, selectedRecipe])
 
   const refreshLocalState = useCallback(async () => {
     try {
-      await refreshRecipes()
-      await refreshSelected()
+      await Promise.all([refreshRecipes(), refreshReferenceData(), refreshSelected()])
       setError(null)
     } catch {
       setError('Não foi possível atualizar as receitas locais agora.')
     }
-  }, [refreshRecipes, refreshSelected])
+  }, [refreshRecipes, refreshReferenceData, refreshSelected])
 
   useEffect(() => {
     let active = true
 
     const initialLoad = async () => {
-      if (!repository) {
+      if (!repositories) {
         setLoading(false)
         return
       }
       try {
-        const rows = await repository.listRecipes()
+        const [rows, nextCategories, nextProfiles] = await Promise.all([
+          repositories.recipes.listRecipes(),
+          repositories.categories.listCategories(),
+          repositories.conversions.listDensityProfiles(),
+        ])
         if (active) {
           setRecipes(rows)
+          setCategories(nextCategories)
+          setConversionProfiles(nextProfiles)
           setError(null)
         }
       } catch {
@@ -89,10 +119,10 @@ export function RecipesRoute() {
 
     void initialLoad()
     return () => { active = false }
-  }, [repository])
+  }, [repositories])
 
   useEffect(() => {
-    if (!repository) return
+    if (!repositories) return
     const listener = database.registerListener({
       crudUpdate: () => void refreshLocalState(),
     } as Parameters<PowerSyncDatabase['registerListener']>[0]) as unknown
@@ -100,52 +130,61 @@ export function RecipesRoute() {
     return () => {
       if (typeof listener === 'function') listener()
     }
-  }, [database, repository, refreshLocalState])
+  }, [database, repositories, refreshLocalState])
 
   async function openRecipe(id: string): Promise<void> {
-    if (!repository) return
+    if (!repositories) return
     setError(null)
     try {
-      const recipe = await repository.getRecipe(id)
+      const [recipe, categoryIds] = await Promise.all([
+        repositories.recipes.getRecipe(id),
+        repositories.categories.listRecipeCategoryIds(id),
+      ])
       if (!recipe) {
         setError('Esta receita não está mais disponível neste dispositivo.')
         await refreshRecipes()
         return
       }
       setSelectedRecipe(recipe)
+      setSelectedCategoryIds(categoryIds)
       setMode('view')
     } catch {
       setError('Não foi possível abrir esta receita.')
     }
   }
 
-  async function saveNewRecipe(draft: RecipeDraft): Promise<void> {
-    if (!repository) return
-    await repository.createRecipe(draft)
+  async function saveNewRecipe(draft: RecipeDraft, categoryIds: string[]): Promise<void> {
+    if (!repositories) return
+    await repositories.recipes.createRecipe(draft)
+    await repositories.categories.setRecipeCategories(draft.id, categoryIds)
     await refreshRecipes()
-    const recipe = await repository.getRecipe(draft.id)
+    const recipe = await repositories.recipes.getRecipe(draft.id)
     if (!recipe) throw new Error('A receita foi salva localmente, mas ainda não pôde ser reaberta.')
     setSelectedRecipe(recipe)
+    setSelectedCategoryIds(categoryIds)
     setMode('view')
   }
 
-  async function saveEditedRecipe(draft: RecipeDraft): Promise<void> {
-    if (!repository || !selectedRecipe) return
-    await repository.updateRecipe(selectedRecipe.id, draft)
+  async function saveEditedRecipe(draft: RecipeDraft, categoryIds: string[]): Promise<void> {
+    if (!repositories || !selectedRecipe) return
+    await repositories.recipes.updateRecipe(selectedRecipe.id, draft)
+    await repositories.categories.setRecipeCategories(selectedRecipe.id, categoryIds)
     await refreshRecipes()
-    const recipe = await repository.getRecipe(selectedRecipe.id)
+    const recipe = await repositories.recipes.getRecipe(selectedRecipe.id)
     if (!recipe) throw new Error('A receita editada não pôde ser reaberta.')
     setSelectedRecipe(recipe)
+    setSelectedCategoryIds(categoryIds)
     setMode('view')
   }
 
   async function deleteSelectedRecipe(): Promise<void> {
-    if (!repository || !selectedRecipe) return
+    if (!repositories || !selectedRecipe) return
     setError(null)
     try {
-      await repository.softDeleteRecipe(selectedRecipe.id)
+      await repositories.recipes.softDeleteRecipe(selectedRecipe.id)
       setConfirmingDelete(false)
       setSelectedRecipe(null)
+      setSelectedCategoryIds([])
       setMode('list')
       await refreshRecipes()
     } catch {
@@ -153,7 +192,7 @@ export function RecipesRoute() {
     }
   }
 
-  if (!repository) {
+  if (!repositories) {
     return (
       <section className="route-section" aria-labelledby="recipes-title">
         <p className="route-kicker">Nosso caderno</p>
@@ -173,7 +212,12 @@ export function RecipesRoute() {
             <p className="route-intro">As alterações são salvas primeiro neste dispositivo e entram na fila de sincronização.</p>
           </div>
         </header>
-        <RecipeEditor onSave={saveNewRecipe} onCancel={() => setMode('list')} />
+        <RecipeEditor
+          availableCategories={categories}
+          initialCategoryIds={[]}
+          onSave={saveNewRecipe}
+          onCancel={() => setMode('list')}
+        />
       </section>
     )
   }
@@ -187,7 +231,13 @@ export function RecipesRoute() {
             <h1 id="edit-recipe-title">{selectedRecipe.title}</h1>
           </div>
         </header>
-        <RecipeEditor initial={selectedRecipe} onSave={saveEditedRecipe} onCancel={() => setMode('view')} />
+        <RecipeEditor
+          initial={selectedRecipe}
+          availableCategories={categories}
+          initialCategoryIds={selectedCategoryIds}
+          onSave={saveEditedRecipe}
+          onCancel={() => setMode('view')}
+        />
       </section>
     )
   }
@@ -198,7 +248,8 @@ export function RecipesRoute() {
         {error ? <p className="auth-error" role="alert">{error}</p> : null}
         <RecipeDetail
           recipe={selectedRecipe}
-          onBack={() => { setSelectedRecipe(null); setMode('list') }}
+          conversionProfiles={conversionProfiles}
+          onBack={() => { setSelectedRecipe(null); setSelectedCategoryIds([]); setMode('list') }}
           onEdit={() => setMode('edit')}
           onDelete={() => setConfirmingDelete(true)}
         />
