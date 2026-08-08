@@ -1,0 +1,188 @@
+.recipe-photos {
+  display: grid;
+  gap: var(--space-5);
+  padding-top: var(--space-6);
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.recipe-photos__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.recipe-photos__heading h2 {
+  margin-bottom: 0;
+  font-size: var(--font-size-xl);
+}
+
+.recipe-photos__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: var(--space-4);
+}
+
+.recipe-photo {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+}
+
+.recipe-photo img,
+.recipe-photo .media-image-state {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.recipe-photo img {
+  display: block;
+  object-fit: cover;
+}
+
+.recipe-photo .media-image-state {
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.recipe-photo figcaption {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--color-muted);
+  font-size: var(--font-size-sm);
+}
+
+.recipe-photo figcaption > span:first-child {
+  color: var(--color-text);
+}
+
+.recipe-photo--local {
+  padding: var(--space-3);
+  border: var(--border-width) dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-surface) 75%, transparent);
+}
+
+.recipe-photo--local figcaption strong {
+  color: var(--color-accent);
+}
+
+.recipe-photo--local figcaption .button {
+  justify-self: start;
+  margin-top: var(--space-2);
+}
+
+.recipe-photos__empty {
+  margin-bottom: 0;
+  color: var(--color-muted);
+}
+
+.recipe-photos__add {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.4fr) minmax(10rem, 1fr) auto;
+  align-items: end;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.recipe-photos__add label {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  font-weight: 650;
+}
+
+.recipe-photos__add input[type='file'],
+.recipe-photos__add input[type='text'],
+.recipe-photos__add input:not([type]) {
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-strong);
+  color: var(--color-text);
+}
+
+.recipe-photos__add input[type='file'] {
+  padding: var(--space-2);
+}
+
+.cooking-history-panel {
+  display: grid;
+  gap: var(--space-5);
+  padding-top: var(--space-6);
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.cooking-history-panel__rating-editor {
+  max-width: 42rem;
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.cooking-history-panel__rating-editor > summary {
+  min-height: var(--tap-min);
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.cooking-history-panel__rating-editor[open] > summary {
+  margin-bottom: var(--space-4);
+}
+
+.cooking-history-panel__session-select {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  font-weight: 650;
+}
+
+.cooking-history-panel__session-select select {
+  min-height: var(--tap-min);
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-strong);
+  color: var(--color-text);
+}
+
+.cooking-draft-conflict {
+  display: grid;
+  max-width: 42rem;
+  gap: var(--space-4);
+}
+
+.cooking-draft-conflict__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+@media (max-width: 42rem) {
+  .recipe-photos__add {
+    grid-template-columns: 1fr;
+  }
+
+  .recipe-photos__add .button,
+  .cooking-draft-conflict__actions .button {
+    width: 100%;
+  }
+
+  .cooking-draft-conflict__actions {
+    display: grid;
+  }
+}
