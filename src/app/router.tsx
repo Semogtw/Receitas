@@ -7,6 +7,7 @@ import { LoginScreen } from '../features/auth/LoginScreen'
 import { PasswordRecoveryScreen } from '../features/auth/PasswordRecoveryScreen'
 import { PendingSetupScreen } from '../features/auth/PendingSetupScreen'
 import { UpdatePasswordScreen } from '../features/auth/UpdatePasswordScreen'
+import { ConflictCenter } from '../features/conflicts/ConflictCenter'
 import { HistoryRoute } from './routes/HistoryRoute'
 import { PlannerRoute } from './routes/PlannerRoute'
 import { RecipesRoute } from './routes/RecipesRoute'
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
       { path: 'shopping', Component: ShoppingRoute },
       { path: 'history', Component: HistoryRoute },
       { path: 'settings', Component: SettingsRoute },
+      { path: 'conflicts', Component: ConflictCenter },
       { path: '*', element: <Navigate to="/recipes" replace /> },
     ],
   },
