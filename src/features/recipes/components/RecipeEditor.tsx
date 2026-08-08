@@ -2,12 +2,16 @@ import { useState, type FormEvent } from 'react'
 import { formatAmount, parseAmount } from '../domain/amount'
 import type { IngredientAmount, Rational } from '../domain/types'
 import type { RecipeAggregate, RecipeDraft } from '../data/recipe-repository'
+import type { RecipeCategory } from '../data/category-repository'
+import { CategorySelector } from './CategorySelector'
 import { IngredientEditor, type IngredientEditorValue } from './IngredientEditor'
 import { StepEditor, type StepEditorValue } from './StepEditor'
 
 interface RecipeEditorProps {
   initial?: RecipeAggregate | null
-  onSave(draft: RecipeDraft): void | Promise<void>
+  availableCategories?: readonly RecipeCategory[]
+  initialCategoryIds?: readonly string[]
+  onSave(draft: RecipeDraft, categoryIds: string[]): void | Promise<void>
   onCancel?: () => void
 }
 
@@ -74,7 +78,13 @@ function moveItem<T>(items: T[], from: number, to: number): T[] {
   return next
 }
 
-export function RecipeEditor({ initial, onSave, onCancel }: RecipeEditorProps) {
+export function RecipeEditor({
+  initial,
+  availableCategories = [],
+  initialCategoryIds = [],
+  onSave,
+  onCancel,
+}: RecipeEditorProps) {
   const [recipeId] = useState(() => initial?.id ?? newId())
   const [title, setTitle] = useState(initial?.title ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
@@ -84,6 +94,7 @@ export function RecipeEditor({ initial, onSave, onCancel }: RecipeEditorProps) {
   const [cookMinutes, setCookMinutes] = useState(() => secondsToMinutes(initial?.cookTimeSeconds ?? null))
   const [favorite, setFavorite] = useState(initial?.favorite ?? false)
   const [wantToMake, setWantToMake] = useState(initial?.wantToMake ?? false)
+  const [categoryIds, setCategoryIds] = useState<string[]>(() => [...initialCategoryIds])
   const [ingredients, setIngredients] = useState<IngredientEditorValue[]>(() => initialIngredients(initial))
   const [steps, setSteps] = useState<StepEditorValue[]>(() => initialSteps(initial))
   const [saving, setSaving] = useState(false)
@@ -147,7 +158,7 @@ export function RecipeEditor({ initial, onSave, onCancel }: RecipeEditorProps) {
       }
 
       setSaving(true)
-      await onSave(draft)
+      await onSave(draft, categoryIds)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível salvar a receita.')
     } finally {
@@ -188,6 +199,7 @@ export function RecipeEditor({ initial, onSave, onCancel }: RecipeEditorProps) {
           <label><input type="checkbox" checked={favorite} onChange={(event) => setFavorite(event.currentTarget.checked)} /> Favorita</label>
           <label><input type="checkbox" checked={wantToMake} onChange={(event) => setWantToMake(event.currentTarget.checked)} /> Queremos fazer</label>
         </div>
+        <CategorySelector categories={availableCategories} selectedIds={categoryIds} onChange={setCategoryIds} />
       </div>
 
       <section className="recipe-editor__section" aria-labelledby="ingredients-editor-title">
