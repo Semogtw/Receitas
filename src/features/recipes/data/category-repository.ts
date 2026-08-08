@@ -44,6 +44,16 @@ export class CategoryRepository {
     return rows.map((row) => ({ id: row.id, name: String(row.name) }))
   }
 
+  async listRecipeCategoryIds(recipeId: string): Promise<string[]> {
+    const rows = await this.database.getAll<DatabaseRow>(
+      'SELECT id, category_id FROM recipe_categories WHERE recipe_id = ? AND pair_id = ? AND deleted_at IS NULL ORDER BY created_at ASC',
+      [recipeId, this.scope.pairId],
+    )
+    return rows
+      .map((row) => row.category_id)
+      .filter((categoryId): categoryId is string => typeof categoryId === 'string')
+  }
+
   async createCategory(id: string, rawName: string): Promise<string> {
     const now = new Date().toISOString()
     await this.writeMutation(this.database, createMutationEnvelope({
@@ -118,6 +128,42 @@ export class CategoryRepository {
     await this.softDeleteLink(row, new Date().toISOString())
   }
 
+  async setRecipeCategories(recipeId: string, selectedCategoryIds: readonly string[]): Promise<void> {
+    const selected = new Set(selectedCategoryIds)
+    if (selected.size !== selectedCategoryIds.length) {
+      throw new Error('Recipe category selection contains duplicate ids')
+    }
+
+    const links = await this.database.getAll<DatabaseRow>(
+      'SELECT * FROM recipe_categories WHERE recipe_id = ? AND pair_id = ? ORDER BY updated_at DESC',
+      [recipeId, this.scope.pairId],
+    )
+    const now = new Date().toISOString()
+    const latestByCategory = new Map<string, DatabaseRow>()
+
+    for (const link of links) {
+      const categoryId = typeof link.category_id === 'string' ? link.category_id : null
+      if (categoryId && !latestByCategory.has(categoryId)) latestByCategory.set(categoryId, link)
+    }
+
+    for (const [categoryId, link] of latestByCategory) {
+      const isActive = link.deleted_at === null || link.deleted_at === undefined
+      if (isActive && !selected.has(categoryId)) {
+        await this.softDeleteLink(link, now)
+      }
+    }
+
+    for (const categoryId of selected) {
+      const existing = latestByCategory.get(categoryId)
+      if (!existing) {
+        await this.assignCategory(crypto.randomUUID(), recipeId, categoryId)
+        continue
+      }
+      if (existing.deleted_at === null || existing.deleted_at === undefined) continue
+      await this.restoreLink(existing, now)
+    }
+  }
+
   async softDeleteCategory(id: string): Promise<void> {
     const row = await this.database.getOptional<DatabaseRow>(
       'SELECT * FROM categories WHERE id = ? AND pair_id = ? AND deleted_at IS NULL LIMIT 1',
@@ -142,6 +188,20 @@ export class CategoryRepository {
       operation: 'soft_delete',
       ...base,
       next: { ...current, deleted_at: now, updated_at: now },
+    }))
+  }
+
+  private async restoreLink(row: DatabaseRow, now: string): Promise<void> {
+    const current = payloadFromRow(row)
+    const base = await resolveMutationBase(this.database, 'recipe_categories', row.id, current)
+    await this.writeMutation(this.database, createMutationEnvelope({
+      pairId: this.scope.pairId,
+      actorUserId: this.scope.actorUserId,
+      entityType: 'recipe_categories',
+      entityId: row.id,
+      operation: 'update',
+      ...base,
+      next: { ...current, deleted_at: null, updated_at: now },
     }))
   }
 
