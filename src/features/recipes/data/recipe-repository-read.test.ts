@@ -18,7 +18,7 @@ function databaseFixture() {
     id: '50000000-0000-4000-8000-000000000005', pair_id: pairId, revision: 1,
     recipe_id: recipeId, position: 0, quantity_numerator: 3, quantity_denominator: 2,
     quantity_text: null, unit: 'xícara', ingredient_name: 'Farinha', normalized_name: 'farinha',
-    note: null, is_approximate: 0, is_optional: 0,
+    note: null, is_approximate: 1, is_optional: 1,
     created_at: recipe.created_at, updated_at: recipe.updated_at, deleted_at: null,
   }
   const step = {
@@ -39,7 +39,7 @@ function databaseFixture() {
 }
 
 describe('RecipeRepository reads', () => {
-  it('maps persisted recipe rows back to exact domain amounts', async () => {
+  it('maps persisted recipe rows back to exact domain amounts and editing flags', async () => {
     const repository = new RecipeRepository(databaseFixture(), { pairId, actorUserId })
 
     const recipe = await repository.getRecipe(recipeId)
@@ -48,7 +48,11 @@ describe('RecipeRepository reads', () => {
     expect(recipe?.title).toBe('Bolo')
     expect(recipe?.favorite).toBe(true)
     expect(recipe?.baseYield).toEqual({ numerator: 4, denominator: 1 })
-    expect(recipe?.ingredients[0]?.amount).toEqual({ kind: 'numeric', value: { numerator: 3, denominator: 2 } })
+    expect(recipe?.ingredients[0]).toMatchObject({
+      amount: { kind: 'numeric', value: { numerator: 3, denominator: 2 } },
+      isApproximate: true,
+      isOptional: true,
+    })
     expect(recipe?.steps[0]).toMatchObject({ instruction: 'Misture.', note: 'Sem bater demais', durationSeconds: 120 })
   })
 
