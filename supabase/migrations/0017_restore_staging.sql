@@ -42,14 +42,18 @@ create index restore_jobs_expiry_idx
 create table private.restore_staged_data (
   job_id uuid not null references private.restore_jobs(id) on delete cascade,
   path text not null,
-  sha256 text not null check (sha256 ~ '^[0-9a-f]{64}$'),
-  byte_size bigint not null check (byte_size >= 0),
+  batch_index integer not null check (batch_index >= 0),
+  file_sha256 text not null check (file_sha256 ~ '^[0-9a-f]{64}$'),
+  file_byte_size bigint not null check (file_byte_size >= 0 and file_byte_size <= 67108864),
   payload jsonb not null,
+  payload_byte_size integer not null check (payload_byte_size between 1 and 1048576),
   staged_at timestamptz not null default now(),
-  primary key (job_id, path),
-  check (path like 'data/%' and path !~ '(^|/)\.\.?(/|$)'),
-  check (byte_size <= 67108864)
+  primary key (job_id, path, batch_index),
+  check (path like 'data/%' and path !~ '(^|/)\.\.?(/|$)')
 );
+
+create index restore_staged_data_job_path_idx
+  on private.restore_staged_data(job_id, path, batch_index);
 
 create table private.restore_staged_media (
   job_id uuid not null references private.restore_jobs(id) on delete cascade,
@@ -176,14 +180,16 @@ $$;
 revoke all on function public.create_restore_job(uuid, uuid, text, text, jsonb, text) from public, anon, authenticated;
 grant execute on function public.create_restore_job(uuid, uuid, text, text, jsonb, text) to service_role;
 
-create or replace function public.stage_restore_data_entry(
+create or replace function public.stage_restore_data_batch(
   p_job_id uuid,
   p_pair_id uuid,
   p_actor_user_id uuid,
   p_path text,
-  p_sha256 text,
-  p_byte_size bigint,
-  p_payload jsonb
+  p_batch_index integer,
+  p_file_sha256 text,
+  p_file_byte_size bigint,
+  p_payload jsonb,
+  p_payload_byte_size integer
 )
 returns void
 language plpgsql
@@ -210,19 +216,41 @@ begin
   if job.expires_at <= now() then
     raise exception 'restore job expired' using errcode = '22023';
   end if;
+  if p_payload is null then
+    raise exception 'restore data batch payload is required' using errcode = '22023';
+  end if;
+  if octet_length(p_payload::text) > 1048576 or p_payload_byte_size > 1048576 then
+    raise exception 'restore data batch exceeds server limit' using errcode = '22023';
+  end if;
 
-  insert into private.restore_staged_data (job_id, path, sha256, byte_size, payload)
-  values (p_job_id, p_path, p_sha256, p_byte_size, p_payload)
-  on conflict (job_id, path) do update
-     set sha256 = excluded.sha256,
-         byte_size = excluded.byte_size,
+  insert into private.restore_staged_data (
+    job_id,
+    path,
+    batch_index,
+    file_sha256,
+    file_byte_size,
+    payload,
+    payload_byte_size
+  ) values (
+    p_job_id,
+    p_path,
+    p_batch_index,
+    p_file_sha256,
+    p_file_byte_size,
+    p_payload,
+    p_payload_byte_size
+  )
+  on conflict (job_id, path, batch_index) do update
+     set file_sha256 = excluded.file_sha256,
+         file_byte_size = excluded.file_byte_size,
          payload = excluded.payload,
+         payload_byte_size = excluded.payload_byte_size,
          staged_at = now();
 end;
 $$;
 
-revoke all on function public.stage_restore_data_entry(uuid, uuid, uuid, text, text, bigint, jsonb) from public, anon, authenticated;
-grant execute on function public.stage_restore_data_entry(uuid, uuid, uuid, text, text, bigint, jsonb) to service_role;
+revoke all on function public.stage_restore_data_batch(uuid, uuid, uuid, text, integer, text, bigint, jsonb, integer) from public, anon, authenticated;
+grant execute on function public.stage_restore_data_batch(uuid, uuid, uuid, text, integer, text, bigint, jsonb, integer) to service_role;
 
 create or replace function public.stage_restore_media_entry(
   p_job_id uuid,
@@ -386,10 +414,12 @@ as $$
     'data_entries', coalesce((
       select jsonb_agg(jsonb_build_object(
         'path', d.path,
-        'sha256', d.sha256,
-        'byte_size', d.byte_size,
-        'payload', d.payload
-      ) order by d.path)
+        'batch_index', d.batch_index,
+        'file_sha256', d.file_sha256,
+        'file_byte_size', d.file_byte_size,
+        'payload', d.payload,
+        'payload_byte_size', d.payload_byte_size
+      ) order by d.path, d.batch_index)
       from private.restore_staged_data d
       where d.job_id = j.id
     ), '[]'::jsonb),
