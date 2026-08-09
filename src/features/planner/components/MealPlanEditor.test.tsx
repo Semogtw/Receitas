@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { RecipeSummary } from '../../recipes/data/recipe-repository'
@@ -41,7 +41,7 @@ describe('MealPlanEditor', () => {
       />,
     )
 
-    await user.type(screen.getByLabelText('Horário opcional'), '19:30')
+    fireEvent.change(screen.getByLabelText('Horário opcional'), { target: { value: '19:30' } })
     await user.type(screen.getByLabelText('Porções opcionais'), '2,5')
     await user.type(screen.getByLabelText('Observação'), 'Jantar antecipado')
     await user.click(screen.getByRole('button', { name: 'Salvar planejamento' }))
