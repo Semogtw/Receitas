@@ -29,6 +29,7 @@
     "@journeyapps/wa-sqlite": "^2.0.0",
     "@powersync/web": "^2.0.0",
     "@supabase/supabase-js": "^2.110.9",
+    "@zip.js/zip.js": "2.8.36",
     "lucide-react": "^1.27.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
