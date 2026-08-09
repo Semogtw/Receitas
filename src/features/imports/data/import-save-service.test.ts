@@ -63,25 +63,21 @@ describe('buildRecipeDraftFromImport', () => {
     expect(draft.baseYield).toBeNull()
     expect(draft.baseYieldUnit).toBeNull()
   })
+
+  it('rejects non-finite or negative reviewed times', () => {
+    expect(() => buildRecipeDraftFromImport(imported({ prepTimeMinutes: Number.NaN }))).toThrow('non-negative finite')
+    expect(() => buildRecipeDraftFromImport(imported({ cookTimeMinutes: -1 }))).toThrow('non-negative finite')
+  })
 })
 
 describe('ImportSaveService', () => {
-  it('coalesces URL provenance onto the recipe created by the canonical repository', async () => {
-    let createdDraft: RecipeDraft | null = null
-    const recipes = {
-      createRecipe: vi.fn(async (draft: RecipeDraft) => {
-        createdDraft = draft
-        return draft.id
-      }),
-    }
-    const database = {
+  function databaseFor(createdRecipeId: () => string) {
+    return {
       getOptional: vi.fn(async (sql: string) => {
-        if (sql.includes('mutation_outbox')) {
-          return { base_revision: null, base_payload: null }
-        }
+        if (sql.includes('mutation_outbox')) return { base_revision: null, base_payload: null }
         if (sql.includes('FROM recipes')) {
           return {
-            id: createdDraft?.id ?? 'missing',
+            id: createdRecipeId(),
             pair_id: scope.pairId,
             revision: 0,
             title: 'Bolo de cenoura',
@@ -99,6 +95,17 @@ describe('ImportSaveService', () => {
         return null
       }),
     } as unknown as PowerSyncDatabase
+  }
+
+  it('coalesces URL provenance onto the recipe created by the canonical repository', async () => {
+    let createdDraft: RecipeDraft | null = null
+    const recipes = {
+      createRecipe: vi.fn(async (draft: RecipeDraft) => {
+        createdDraft = draft
+        return draft.id
+      }),
+    }
+    const database = databaseFor(() => createdDraft?.id ?? 'missing')
     const envelopes: MutationEnvelope[] = []
     const writer = vi.fn(async (_database: PowerSyncDatabase, envelope: MutationEnvelope) => {
       envelopes.push(envelope)
@@ -126,34 +133,29 @@ describe('ImportSaveService', () => {
 
   it('stores pasted-text provenance without a remote URL', async () => {
     const recipes = { createRecipe: vi.fn(async (draft: RecipeDraft) => draft.id) }
-    const database = {
-      getOptional: vi.fn(async (sql: string) => {
-        if (sql.includes('mutation_outbox')) return { base_revision: null, base_payload: null }
-        return {
-          id: '40000000-0000-4000-8000-000000000004',
-          pair_id: scope.pairId,
-          revision: 0,
-          title: 'Bolo de cenoura',
-          source_kind: 'manual',
-          source_url: null,
-          created_by: scope.actorUserId,
-          created_at: '2026-08-09T00:00:00.000Z',
-          updated_at: '2026-08-09T00:00:00.000Z',
-          deleted_at: null,
-        }
-      }),
-    } as unknown as PowerSyncDatabase
+    let lastId = '40000000-0000-4000-8000-000000000004'
+    const database = databaseFor(() => lastId)
     const envelopes: MutationEnvelope[] = []
     const service = new ImportSaveService(
       database,
       scope,
-      recipes,
+      { createRecipe: vi.fn(async (draft: RecipeDraft) => { lastId = draft.id; return draft.id }) },
       async (_db, envelope) => { envelopes.push(envelope); return envelope.mutationId },
     )
 
     await service.save(imported({ sourceUrl: null }), 'pasted_text')
 
+    expect(recipes.createRecipe).not.toHaveBeenCalled()
     expect(envelopes[0]?.next.source_kind).toBe('text')
     expect(envelopes[0]?.next.source_url).toBeNull()
+  })
+
+  it('rejects an unsafe URL edited during review before creating canonical data', async () => {
+    const recipes = { createRecipe: vi.fn(async (draft: RecipeDraft) => draft.id) }
+    const service = new ImportSaveService(databaseFor(() => 'unused'), scope, recipes, vi.fn())
+
+    await expect(service.save(imported({ sourceUrl: 'javascript:alert(1)' }), 'schema_org'))
+      .rejects.toThrow('Imported URL source is invalid')
+    expect(recipes.createRecipe).not.toHaveBeenCalled()
   })
 })
