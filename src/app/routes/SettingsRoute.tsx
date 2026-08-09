@@ -19,7 +19,14 @@ export function SettingsRoute() {
 
       {auth.pairId ? (
         <>
-          <CompleteBackupPanel database={database} pairId={auth.pairId} appVersion={APP_VERSION} />
+          {auth.userId ? (
+            <CompleteBackupPanel
+              database={database}
+              pairId={auth.pairId}
+              actorUserId={auth.userId}
+              appVersion={APP_VERSION}
+            />
+          ) : null}
           <DiagnosticsScreen database={database} pairId={auth.pairId} appVersion={APP_VERSION} />
         </>
       ) : null}
