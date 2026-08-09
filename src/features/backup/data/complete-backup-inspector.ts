@@ -5,6 +5,7 @@ import {
   type BackupMediaFileDescriptor,
 } from '../domain/complete-backup-format'
 import { assertCompleteBackupArchiveSize } from '../domain/complete-backup-limits'
+import { validateBackupPhotoMediaLinkage } from '../domain/complete-backup-media-linkage'
 import {
   parseCompleteBackupDataJson,
   parseCompleteBackupManifest,
@@ -84,6 +85,7 @@ export async function inspectCompleteBackupArchive(blob: Blob): Promise<Complete
     }
 
     const structured = validateStructuredBackupData(data)
+    validateBackupPhotoMediaLinkage(manifest, data)
 
     // Verify media sequentially. The per-entry safety limit keeps peak memory bounded,
     // and no canonical state is touched during inspection.
