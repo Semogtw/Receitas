@@ -1,5 +1,10 @@
 import { withCorsAndErrors } from '../_shared/http.ts'
 import { createServerClient, getRequestUserId } from '../_shared/server.ts'
+import {
+  commitRestoreMerge,
+  listRestoreMediaPromotion,
+  promoteRestoreMedia,
+} from './commit.ts'
 import { finalizeRestoreStagingStrict } from './finalize.ts'
 import {
   activePairForUser,
@@ -48,6 +53,8 @@ function publicError(error: unknown): Response {
     || code.includes('already_confirmed')
     || code.includes('not_validating')
     || code.includes('not_ready')
+    || code.includes('not_fully_promoted')
+    || code.includes('promotion_state')
   ) {
     return json(409, { error: 'restore_job_state_conflict' })
   }
@@ -122,6 +129,21 @@ const handler = async (request: Request): Promise<Response> => {
       case 'finalize_staging': {
         const job = await finalizeRestoreStagingStrict(admin, userId, pairId, body.jobId)
         return json(200, { job })
+      }
+      case 'list_media_promotion': {
+        const media = await listRestoreMediaPromotion(admin, userId, pairId, body.jobId)
+        return json(200, { media })
+      }
+      case 'promote_media': {
+        const promotion = await promoteRestoreMedia(admin, userId, pairId, {
+          jobId: body.jobId,
+          path: body.path,
+        })
+        return json(200, { promotion })
+      }
+      case 'commit_merge': {
+        const result = await commitRestoreMerge(admin, userId, pairId, body.jobId)
+        return json(200, { result })
       }
       case 'get_job': {
         const job = await readRestoreJobSummary(admin, userId, pairId, body.jobId)
