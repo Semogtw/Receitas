@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { EMPTY_RECIPE_SEARCH_QUERY } from '../domain/search'
@@ -19,13 +19,12 @@ function renderControls() {
 }
 
 describe('RecipeSearchControls', () => {
-  it('updates text search without changing the other criteria', async () => {
-    const user = userEvent.setup()
+  it('updates text search without changing the other criteria', () => {
     const onChange = renderControls()
 
-    await user.type(screen.getByLabelText('Buscar receitas'), 'massa')
+    fireEvent.change(screen.getByLabelText('Buscar receitas'), { target: { value: 'massa' } })
 
-    expect(onChange).toHaveBeenLastCalledWith({ ...EMPTY_RECIPE_SEARCH_QUERY, text: 'a' })
+    expect(onChange).toHaveBeenCalledWith({ ...EMPTY_RECIPE_SEARCH_QUERY, text: 'massa' })
   })
 
   it('activates independent state filters', async () => {
