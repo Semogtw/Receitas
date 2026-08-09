@@ -4,6 +4,7 @@ import { performLocalMutation } from '../../../data/mutations/performLocalMutati
 import { resolveMutationBase } from '../../../data/mutations/resolveMutationBase'
 import { deserializeIngredientAmount, serializeIngredientAmount } from '../../recipes/domain/amount'
 import type {
+  ConsolidatedShoppingItem,
   ShoppingItem,
   ShoppingItemDraft,
   ShoppingItemPatch,
@@ -111,10 +112,16 @@ function mapItem(row: DatabaseRow): ShoppingItem {
     }),
     unit: typeof row.unit === 'string' ? row.unit : null,
     source,
+    sources: sources.length > 0 ? sources : [source],
     purchased: Boolean(row.checked),
     revision: Number(row.revision),
     deletedAt: typeof row.deleted_at === 'string' ? row.deleted_at : null,
   }
+}
+
+function sourceKind(sources: readonly ShoppingSource[]): 'manual' | 'recipe' | 'planner' | 'mixed' {
+  const kinds = new Set(sources.map((source) => source.kind))
+  return kinds.size === 1 ? sources[0]!.kind : 'mixed'
 }
 
 export class ShoppingRepository {
@@ -190,6 +197,8 @@ export class ShoppingRepository {
     )
     const now = new Date().toISOString()
 
+    // Clear the previous default first so local-first writes never expose two defaults.
+    // The server-side partial unique index remains the concurrency authority across devices.
     for (const row of currentDefaults) {
       await this.updateRow('shopping_lists', row, { is_default: 0, updated_at: now })
     }
@@ -199,44 +208,12 @@ export class ShoppingRepository {
   }
 
   async addItem(listId: string, draft: ShoppingItemDraft): Promise<string> {
-    await this.activeRow('shopping_lists', listId)
-    const name = requiredText(draft.name, 'Shopping item name', 240)
-    const normalizedName = requiredText(draft.normalizedName, 'Normalized shopping item name', 240)
-    const source = validateSource(draft.source)
-    const positionRow = await this.database.getOptional<{ max_position: number | null }>(
-      `SELECT MAX(position) AS max_position FROM shopping_items
-       WHERE pair_id = ? AND shopping_list_id = ? AND deleted_at IS NULL`,
-      [this.scope.pairId, listId],
-    )
-    const id = crypto.randomUUID()
-    const now = new Date().toISOString()
+    return this.addItemWithSources(listId, draft, [draft.source])
+  }
 
-    await this.writeMutation(this.database, createMutationEnvelope({
-      pairId: this.scope.pairId,
-      actorUserId: this.scope.actorUserId,
-      entityType: 'shopping_items',
-      entityId: id,
-      operation: 'create',
-      baseRevision: null,
-      base: null,
-      next: {
-        pair_id: this.scope.pairId,
-        revision: 0,
-        shopping_list_id: listId,
-        item_name: name,
-        normalized_name: normalizedName,
-        ...amountColumns(draft.amount),
-        unit: normalizeUnit(draft.unit),
-        checked: 0,
-        source_kind: source.kind,
-        source_refs: JSON.stringify([sourceToJson(source)]),
-        position: (positionRow?.max_position ?? -1) + 1,
-        created_at: now,
-        updated_at: now,
-        deleted_at: null,
-      },
-    }))
-    return id
+  async addConsolidatedItem(listId: string, draft: ConsolidatedShoppingItem): Promise<string> {
+    if (draft.sources.length === 0) throw new Error('Consolidated shopping item requires at least one source')
+    return this.addItemWithSources(listId, draft, draft.sources)
   }
 
   async updateItem(id: string, patch: ShoppingItemPatch): Promise<void> {
@@ -281,6 +258,53 @@ export class ShoppingRepository {
     )
     if (!row) throw new Error('Deleted shopping item not found')
     await this.updateRow('shopping_items', row, { deleted_at: null, updated_at: new Date().toISOString() })
+  }
+
+  private async addItemWithSources(
+    listId: string,
+    draft: ShoppingItemDraft,
+    rawSources: readonly ShoppingSource[],
+  ): Promise<string> {
+    await this.activeRow('shopping_lists', listId)
+    const name = requiredText(draft.name, 'Shopping item name', 240)
+    const normalizedName = requiredText(draft.normalizedName, 'Normalized shopping item name', 240)
+    const sources = rawSources.map(validateSource)
+    if (sources.length === 0) throw new Error('Shopping item requires at least one source')
+
+    const positionRow = await this.database.getOptional<{ max_position: number | null }>(
+      `SELECT MAX(position) AS max_position FROM shopping_items
+       WHERE pair_id = ? AND shopping_list_id = ? AND deleted_at IS NULL`,
+      [this.scope.pairId, listId],
+    )
+    const id = crypto.randomUUID()
+    const now = new Date().toISOString()
+
+    await this.writeMutation(this.database, createMutationEnvelope({
+      pairId: this.scope.pairId,
+      actorUserId: this.scope.actorUserId,
+      entityType: 'shopping_items',
+      entityId: id,
+      operation: 'create',
+      baseRevision: null,
+      base: null,
+      next: {
+        pair_id: this.scope.pairId,
+        revision: 0,
+        shopping_list_id: listId,
+        item_name: name,
+        normalized_name: normalizedName,
+        ...amountColumns(draft.amount),
+        unit: normalizeUnit(draft.unit),
+        checked: 0,
+        source_kind: sourceKind(sources),
+        source_refs: JSON.stringify(sources.map(sourceToJson)),
+        position: (positionRow?.max_position ?? -1) + 1,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+      },
+    }))
+    return id
   }
 
   private async updateRow(
