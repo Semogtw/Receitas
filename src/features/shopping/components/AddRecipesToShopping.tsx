@@ -98,15 +98,21 @@ export function AddRecipesToShopping({
     }
   }
 
-  function updatePreview(index: number, changes: Partial<PreviewRow['item']> & { amountText?: string }) {
+  function updatePreview(
+    index: number,
+    changes: Partial<PreviewRow['item']> & { amountText?: string },
+  ) {
+    const { amountText, ...itemChanges } = changes
     setPreview((current) => current.map((row, rowIndex) => rowIndex === index
       ? {
           item: {
             ...row.item,
-            ...changes,
-            ...(typeof changes.name === 'string' ? { normalizedName: normalizeName(changes.name) } : {}),
+            ...itemChanges,
+            ...(typeof itemChanges.name === 'string'
+              ? { normalizedName: normalizeName(itemChanges.name) }
+              : {}),
           },
-          amountText: changes.amountText ?? row.amountText,
+          amountText: amountText ?? row.amountText,
         }
       : row))
   }
