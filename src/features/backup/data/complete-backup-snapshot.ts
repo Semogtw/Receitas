@@ -86,6 +86,14 @@ async function rowsForPair(context: QueryContext, table: string, pairId: string)
   ))
 }
 
+async function photoRowsForPair(context: QueryContext, table: string, pairId: string): Promise<CompleteBackupPhotoRow[]> {
+  const rows = await context.getAll<CompleteBackupPhotoRow>(
+    `SELECT * FROM ${table} WHERE pair_id = ? ORDER BY id ASC`,
+    [pairId],
+  )
+  return [...rows].sort((left, right) => left.id.localeCompare(right.id))
+}
+
 export async function captureCompleteBackupSnapshot(
   database: PowerSyncDatabase,
   pairId: string,
@@ -106,14 +114,14 @@ export async function captureCompleteBackupSnapshot(
       rows: await rowsForPair(tx, table, pairId),
     })))
     const [recipePhotos, cookingPhotos] = await Promise.all([
-      rowsForPair(tx, 'recipe_photos', pairId),
-      rowsForPair(tx, 'cooking_session_photos', pairId),
+      photoRowsForPair(tx, 'recipe_photos', pairId),
+      photoRowsForPair(tx, 'cooking_session_photos', pairId),
     ])
 
     const photos: CompleteBackupSnapshot['photos'] = [
       ...recipePhotos.map((row) => ({ ...row, ownerType: 'recipe' as const })),
       ...cookingPhotos.map((row) => ({ ...row, ownerType: 'cooking_session' as const })),
-    ].sort((left, right) => left.id.localeCompare(right.id)) as CompleteBackupSnapshot['photos']
+    ].sort((left, right) => left.id.localeCompare(right.id))
 
     for (const photo of photos) {
       if (photo.storage_state !== 'uploaded') {
