@@ -21,7 +21,6 @@ function writerInto(envelopes: MutationEnvelope[]) {
 
 function databaseWith(options: {
   activePeriod?: Record<string, unknown> | null
-  deletedEntry?: Record<string, unknown> | null
   activeEntry?: Record<string, unknown> | null
   periods?: Record<string, unknown>[]
   entries?: Record<string, unknown>[]
@@ -32,9 +31,6 @@ function databaseWith(options: {
       if (sql.includes('mutation_outbox')) return null
       if (sql.includes('MAX(position)')) return { max_position: options.maxPosition ?? null }
       if (sql.includes('lower(trim(name))')) return null
-      if (sql.includes('meal_plan_entries') && sql.includes('deleted_at IS NOT NULL')) {
-        return options.deletedEntry ?? null
-      }
       if (sql.includes('meal_plan_entries')) return options.activeEntry ?? null
       if (sql.includes('meal_periods')) return options.activePeriod ?? null
       return null
@@ -60,12 +56,12 @@ function activePeriod(id = periodId, position = 0) {
   }
 }
 
-function plannerEntry(deletedAt: string | null = null) {
+function plannerEntry(mealPeriodId: string | null = periodId) {
   return {
     id: entryId,
     pair_id: scope.pairId,
     recipe_id: recipeId,
-    meal_period_id: periodId,
+    meal_period_id: mealPeriodId,
     planned_date: '2026-08-10',
     planned_time: '19:30',
     servings_numerator: 3,
@@ -74,7 +70,7 @@ function plannerEntry(deletedAt: string | null = null) {
     revision: 4,
     created_at: '2026-08-08T12:00:00.000Z',
     updated_at: '2026-08-08T12:00:00.000Z',
-    deleted_at: deletedAt,
+    deleted_at: null,
   }
 }
 
@@ -137,7 +133,7 @@ describe('PlannerRepository', () => {
     })
   })
 
-  it('updates an existing entry in place and can clear optional fields', async () => {
+  it('updates an existing active entry in place and can clear optional fields', async () => {
     const envelopes: MutationEnvelope[] = []
     const repository = new PlannerRepository(databaseWith({ activeEntry: plannerEntry() }), scope, writerInto(envelopes))
 
@@ -168,19 +164,31 @@ describe('PlannerRepository', () => {
     })
   })
 
-  it('soft deletes and restores a planner entry without changing identity', async () => {
+  it('does not reinterpret an edit of a missing or deleted entry as a create/restore', async () => {
     const envelopes: MutationEnvelope[] = []
-    const deleted = plannerEntry('2026-08-09T10:00:00.000Z')
-    const database = databaseWith({ activeEntry: plannerEntry(), deletedEntry: deleted })
-    const repository = new PlannerRepository(database, scope, writerInto(envelopes))
+    const repository = new PlannerRepository(databaseWith({ activeEntry: null }), scope, writerInto(envelopes))
+
+    await expect(repository.upsertEntry({
+      id: entryId,
+      recipeId,
+      date: '2026-08-11',
+      mealPeriodId: periodId,
+      time: null,
+      servings: null,
+      note: null,
+    })).rejects.toThrow('Meal plan entry not found')
+    expect(envelopes).toHaveLength(0)
+  })
+
+  it('soft deletes an entry with the operation required by the server sync contract', async () => {
+    const envelopes: MutationEnvelope[] = []
+    const repository = new PlannerRepository(databaseWith({ activeEntry: plannerEntry() }), scope, writerInto(envelopes))
 
     await repository.softDeleteEntry(entryId)
-    await repository.restoreEntry(entryId)
 
+    expect(envelopes).toHaveLength(1)
     expect(envelopes[0]).toMatchObject({ entityId: entryId, operation: 'soft_delete' })
     expect(typeof envelopes[0]?.next.deleted_at).toBe('string')
-    expect(envelopes[1]).toMatchObject({ entityId: entryId, operation: 'update' })
-    expect(envelopes[1]?.next.deleted_at).toBeNull()
   })
 
   it('lists only the requested inclusive date range and maps rational servings', async () => {
@@ -203,6 +211,15 @@ describe('PlannerRepository', () => {
       deletedAt: null,
     }])
     expect(vi.mocked(database.getAll).mock.calls[0]?.[1]).toEqual([scope.pairId, '2026-08-10', '2026-08-12'])
+  })
+
+  it('preserves a legacy null meal period instead of coercing it to the string "null"', async () => {
+    const database = databaseWith({ entries: [plannerEntry(null)] })
+    const repository = new PlannerRepository(database, scope)
+
+    const [result] = await repository.listEntries({ start: '2026-08-10', end: '2026-08-10' })
+
+    expect(result?.mealPeriodId).toBeNull()
   })
 
   it('rejects invalid date/time input before enqueueing a mutation', async () => {
