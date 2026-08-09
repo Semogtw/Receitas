@@ -1,6 +1,7 @@
 import { PairInviteForm } from '../../features/auth/PairInviteForm'
 import { useAuth } from '../../features/auth/AuthProvider'
 import { CompleteBackupPanel } from '../../features/backup/components/CompleteBackupPanel'
+import { DiagnosticsScreen } from '../../features/diagnostics/components/DiagnosticsScreen'
 import { usePowerSyncDatabase } from '../../data/PowerSyncProvider'
 import { APP_VERSION } from '../../lib/app-version'
 
@@ -17,7 +18,10 @@ export function SettingsRoute() {
       <PairInviteForm />
 
       {auth.pairId ? (
-        <CompleteBackupPanel database={database} pairId={auth.pairId} appVersion={APP_VERSION} />
+        <>
+          <CompleteBackupPanel database={database} pairId={auth.pairId} appVersion={APP_VERSION} />
+          <DiagnosticsScreen database={database} pairId={auth.pairId} appVersion={APP_VERSION} />
+        </>
       ) : null}
 
       <section className="settings-section" aria-labelledby="session-title">
