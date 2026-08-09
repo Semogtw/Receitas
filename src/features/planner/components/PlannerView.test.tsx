@@ -81,8 +81,10 @@ describe('PlannerView', () => {
   it('opens editing from the meal row and exposes a dedicated delete action', async () => {
     const user = userEvent.setup()
     const props = renderPlanner()
+    const editButton = screen.getByText('Macarrão de panela').closest('button')
+    if (!editButton) throw new Error('Planner entry edit button was not rendered')
 
-    await user.click(screen.getByRole('button', { name: /Macarrão de panela/i }))
+    await user.click(editButton)
     expect(props.onEdit).toHaveBeenCalledWith(entry)
 
     await user.click(screen.getByRole('button', { name: 'Remover Macarrão de panela do planejamento' }))
