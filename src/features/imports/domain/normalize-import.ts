@@ -27,9 +27,9 @@ export interface ImportedRecipeDraft {
 const KNOWN_UNITS = new Set([
   'g', 'grama', 'gramas', 'kg', 'quilo', 'quilos', 'quilograma', 'quilogramas',
   'ml', 'mililitro', 'mililitros', 'l', 'litro', 'litros',
-  'xícara', 'xícaras', 'xicara', 'xicaras', 'copo', 'copos',
+  'xicara', 'xicaras', 'copo', 'copos',
   'colher', 'colheres', 'colher de sopa', 'colheres de sopa',
-  'colher de chá', 'colheres de chá', 'chávena', 'chávenas',
+  'colher de cha', 'colheres de cha', 'chavena', 'chavenas',
   'tsp', 'tbsp', 'cup', 'cups', 'oz', 'lb',
   'pacote', 'pacotes', 'lata', 'latas', 'caixa', 'caixas',
   'dente', 'dentes', 'fatia', 'fatias', 'unidade', 'unidades',
