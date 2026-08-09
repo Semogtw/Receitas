@@ -9,6 +9,7 @@ import './styles/recipes.css'
 import './styles/recipe-controls.css'
 import './styles/planner.css'
 import './styles/shopping.css'
+import './styles/search.css'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('Application root element is missing')
