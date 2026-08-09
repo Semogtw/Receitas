@@ -10,6 +10,7 @@ import { BackupRequiresSyncError } from '../data/complete-backup-snapshot'
 interface CompleteBackupPanelProps {
   database: PowerSyncDatabase
   pairId: string
+  actorUserId: string
   appVersion: string
 }
 
@@ -39,10 +40,13 @@ function backupErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.includes('checksum mismatch')) {
     return 'Uma foto baixada não corresponde ao checksum registrado. O backup foi cancelado para evitar corrupção silenciosa.'
   }
-  return error instanceof Error ? error.message : 'Não foi possível gerar o backup completo.'
+  if (error instanceof Error && error.message.includes('MIME type')) {
+    return 'Uma foto não corresponde ao tipo de mídia registrado. O backup foi cancelado para evitar corrupção silenciosa.'
+  }
+  return 'Não foi possível gerar o backup completo. Nenhum arquivo incompleto foi apresentado como backup válido.'
 }
 
-export function CompleteBackupPanel({ database, pairId, appVersion }: CompleteBackupPanelProps) {
+export function CompleteBackupPanel({ database, pairId, actorUserId, appVersion }: CompleteBackupPanelProps) {
   const [exporting, setExporting] = useState(false)
   const [progress, setProgress] = useState<CompleteBackupProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -62,6 +66,7 @@ export function CompleteBackupPanel({ database, pairId, appVersion }: CompleteBa
       const artifact = await createCompleteBackup({
         database,
         pairId,
+        actorUserId,
         appVersion,
         mediaDownloader: downloader,
         onProgress: setProgress,
