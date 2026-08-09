@@ -9,6 +9,7 @@ import { PendingSetupScreen } from '../features/auth/PendingSetupScreen'
 import { UpdatePasswordScreen } from '../features/auth/UpdatePasswordScreen'
 import { ConflictCenter } from '../features/conflicts/ConflictCenter'
 import { HistoryRoute } from './routes/HistoryRoute'
+import { ImportRecipeRoute } from './routes/ImportRecipeRoute'
 import { PlannerRoute } from './routes/PlannerRoute'
 import { RecipesRoute } from './routes/RecipesRoute'
 import { SettingsRoute } from './routes/SettingsRoute'
@@ -27,6 +28,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/recipes" replace /> },
       { path: 'recipes', Component: RecipesRoute },
+      { path: 'recipes/import', Component: ImportRecipeRoute },
       { path: 'planner', Component: PlannerRoute },
       { path: 'shopping', Component: ShoppingRoute },
       { path: 'history', Component: HistoryRoute },
