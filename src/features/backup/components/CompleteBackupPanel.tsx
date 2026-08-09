@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { PowerSyncDatabase } from '@powersync/web'
+import { recordDiagnosticSafely } from '../../diagnostics/record'
 import { SupabaseMediaDownload } from '../../media/data/supabase-media-download'
 import { MEDIA_STORAGE_BUCKET } from '../../media/media-config'
 import { getSupabaseClient } from '../../../lib/supabase/client'
@@ -20,6 +21,14 @@ function progressLabel(progress: CompleteBackupProgress | null): string | null {
     return `Baixando fotos privadas: ${progress.completed}/${progress.total}`
   }
   return 'Montando e verificando o arquivo ZIP…'
+}
+
+function backupErrorCode(error: unknown): string {
+  if (error instanceof BackupRequiresSyncError) return 'requires_sync'
+  if (error instanceof Error && error.message === 'backup_requires_opfs') return 'requires_opfs'
+  if (error instanceof Error && error.message.includes('checksum mismatch')) return 'media_checksum_mismatch'
+  if (error instanceof Error && error.message.includes('MIME type')) return 'media_type_mismatch'
+  return 'export_failed'
 }
 
 function backupErrorMessage(error: unknown): string {
@@ -58,17 +67,28 @@ export function CompleteBackupPanel({ database, pairId, appVersion }: CompleteBa
         onProgress: setProgress,
       })
       const url = URL.createObjectURL(artifact.file)
-      try {
-        const anchor = document.createElement('a')
-        anchor.href = url
-        anchor.download = artifact.filename
-        anchor.rel = 'noopener'
-        anchor.click()
-      } finally {
-        URL.revokeObjectURL(url)
-      }
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = artifact.filename
+      anchor.rel = 'noopener'
+      anchor.click()
+      // Safari/WebKit can start the download asynchronously after click().
+      // Revoking on the next task avoids invalidating the URL too early.
+      setTimeout(() => URL.revokeObjectURL(url), 0)
       setLastResult({ filename: artifact.filename, bytes: artifact.bytes, sha256: artifact.sha256 })
+      void recordDiagnosticSafely(database, {
+        area: 'backup',
+        severity: 'info',
+        code: 'export_completed',
+        technicalContext: { byteSize: artifact.bytes, phase: 'complete' },
+      })
     } catch (cause) {
+      void recordDiagnosticSafely(database, {
+        area: 'backup',
+        severity: 'error',
+        code: 'export_failed',
+        technicalContext: { errorCode: backupErrorCode(cause) },
+      })
       setError(backupErrorMessage(cause))
     } finally {
       setProgress(null)
