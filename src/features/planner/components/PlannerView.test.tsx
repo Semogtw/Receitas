@@ -91,6 +91,19 @@ describe('PlannerView', () => {
     expect(props.onDelete).toHaveBeenCalledWith(entry)
   })
 
+  it('keeps legacy entries without a meal period visible and editable', async () => {
+    const user = userEvent.setup()
+    const unassigned = { ...entry, id: 'legacy-entry', mealPeriodId: null }
+    const props = renderPlanner({ entries: [unassigned] })
+
+    expect(screen.getByRole('heading', { name: 'Sem período' })).toBeTruthy()
+    expect(screen.getByText('Escolha um período ao editar estas refeições.')).toBeTruthy()
+    const editButton = screen.getByText('Macarrão de panela').closest('button')
+    if (!editButton) throw new Error('Unassigned planner entry edit button was not rendered')
+    await user.click(editButton)
+    expect(props.onEdit).toHaveBeenCalledWith(unassigned)
+  })
+
   it('shows a period setup path instead of fake fixed meal periods', async () => {
     const user = userEvent.setup()
     const props = renderPlanner({ periods: [], entries: [] })
