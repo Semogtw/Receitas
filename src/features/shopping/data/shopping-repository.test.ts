@@ -11,6 +11,8 @@ const listId = '71000000-0000-4000-8000-000000000001'
 const defaultListId = '71000000-0000-4000-8000-000000000002'
 const itemId = '72000000-0000-4000-8000-000000000001'
 const recipeId = '40000000-0000-4000-8000-000000000004'
+const secondRecipeId = '40000000-0000-4000-8000-000000000005'
+const mealPlanEntryId = '60000000-0000-4000-8000-000000000006'
 
 function listRow(id: string, isDefault = false) {
   return {
@@ -140,6 +142,30 @@ describe('ShoppingRepository', () => {
     expect(JSON.parse(String(envelopes[0]?.next.source_refs))).toEqual([{ kind: 'recipe', recipeId }])
   })
 
+  it('persists every source of a consolidated item and marks mixed provenance', async () => {
+    const envelopes: MutationEnvelope[] = []
+    const repository = new ShoppingRepository(fakeDatabase(), scope, writerInto(envelopes))
+
+    await repository.addConsolidatedItem(listId, {
+      name: 'Tomate',
+      normalizedName: 'tomate',
+      amount: { kind: 'numeric', value: { numerator: 5, denominator: 1 } },
+      unit: null,
+      source: { kind: 'recipe', recipeId },
+      sources: [
+        { kind: 'recipe', recipeId },
+        { kind: 'planner', recipeId: secondRecipeId, mealPlanEntryId },
+      ],
+      approximate: false,
+    })
+
+    expect(envelopes[0]?.next.source_kind).toBe('mixed')
+    expect(JSON.parse(String(envelopes[0]?.next.source_refs))).toEqual([
+      { kind: 'recipe', recipeId },
+      { kind: 'planner', recipeId: secondRecipeId, mealPlanEntryId },
+    ])
+  })
+
   it('edits and checks an item without replacing its source metadata or identity', async () => {
     const envelopes: MutationEnvelope[] = []
     const row = itemRow()
@@ -192,6 +218,7 @@ describe('ShoppingRepository', () => {
       purchased: false,
       amount: { kind: 'numeric', value: { numerator: 1, denominator: 2 } },
       source: { kind: 'recipe', recipeId },
+      sources: [{ kind: 'recipe', recipeId }],
     })
   })
 })
