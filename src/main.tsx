@@ -12,6 +12,7 @@ import './styles/shopping.css'
 import './styles/search.css'
 import './styles/imports.css'
 import './styles/backup.css'
+import './styles/diagnostics.css'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('Application root element is missing')
