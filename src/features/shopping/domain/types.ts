@@ -27,6 +27,7 @@ export interface ShoppingItem extends ShoppingItemDraft {
   id: string
   listId: string
   pairId: string
+  sources: ShoppingSource[]
   purchased: boolean
   revision: number
   deletedAt: string | null
