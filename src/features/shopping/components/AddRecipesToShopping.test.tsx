@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { RecipeSummary } from '../../recipes/data/recipe-repository'
@@ -83,10 +83,8 @@ describe('AddRecipesToShopping', () => {
 
     await user.click(screen.getByRole('button', { name: 'Planejamento' }))
     const dateInputs = screen.getAllByDisplayValue(/^\d{4}-\d{2}-\d{2}$/)
-    await user.clear(dateInputs[0]!)
-    await user.type(dateInputs[0]!, '2026-08-10')
-    await user.clear(dateInputs[1]!)
-    await user.type(dateInputs[1]!, '2026-08-12')
+    fireEvent.change(dateInputs[0]!, { target: { value: '2026-08-10' } })
+    fireEvent.change(dateInputs[1]!, { target: { value: '2026-08-12' } })
     await user.click(screen.getByRole('button', { name: 'Montar prévia' }))
 
     expect(onBuildPlannerPreview).toHaveBeenCalledWith({ start: '2026-08-10', end: '2026-08-12' })
