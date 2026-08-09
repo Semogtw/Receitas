@@ -26,6 +26,19 @@ export interface PreparedCompleteBackup {
   media: Array<{ path: string; blob: Blob }>
 }
 
+interface OpfsFileHandleLike {
+  createWritable(): Promise<WritableStream<Uint8Array>>
+  getFile(): Promise<File>
+}
+
+interface OpfsDirectoryHandleLike {
+  getFileHandle(name: string, options: { create: true }): Promise<OpfsFileHandleLike>
+}
+
+interface OpfsStorageManagerLike {
+  getDirectory?: () => Promise<OpfsDirectoryHandleLike>
+}
+
 const EXTENSION_BY_MEDIA_TYPE: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -105,45 +118,87 @@ export async function prepareCompleteBackup(input: {
   return {
     manifest,
     data: input.snapshot.dataEntries.map((entry) => ({ path: entry.path, bytes: entry.bytes })),
-    media: mediaDescriptors.map((descriptor) => ({
-      path: descriptor.path,
-      blob: mediaById.get(input.snapshot.photos.find((photo) => safeMediaPath(photo.id, photo.mime_type) === descriptor.path)!.id)!.blob,
+    media: input.snapshot.photos.map((photo) => ({
+      path: safeMediaPath(photo.id, photo.mime_type),
+      blob: mediaById.get(photo.id)!.blob,
     })),
   }
 }
 
-async function writePreparedBackupToZip(prepared: PreparedCompleteBackup): Promise<Blob> {
+function sortedData(prepared: PreparedCompleteBackup) {
+  return [...prepared.data].sort((left, right) => left.path.localeCompare(right.path))
+}
+
+function sortedMedia(prepared: PreparedCompleteBackup) {
+  return [...prepared.media].sort((left, right) => left.path.localeCompare(right.path))
+}
+
+async function writePreparedBackupToBlob(prepared: PreparedCompleteBackup): Promise<Blob> {
   const blobWriter = new BlobWriter('application/zip')
   const writer = new ZipWriter(blobWriter)
 
-  for (const entry of [...prepared.data].sort((left, right) => left.path.localeCompare(right.path))) {
+  for (const entry of sortedData(prepared)) {
     await writer.add(entry.path, new Uint8ArrayReader(entry.bytes))
   }
-  for (const entry of [...prepared.media].sort((left, right) => left.path.localeCompare(right.path))) {
+  for (const entry of sortedMedia(prepared)) {
     await writer.add(entry.path, new BlobReader(entry.blob), { level: 0 })
   }
-
-  const manifestBytes = encodeBackupJson(prepared.manifest)
-  await writer.add('manifest.json', new Uint8ArrayReader(manifestBytes))
+  await writer.add('manifest.json', new Uint8ArrayReader(encodeBackupJson(prepared.manifest)))
   await writer.close()
   return blobWriter.getData()
 }
 
-export async function createCompleteBackupArtifact(prepared: PreparedCompleteBackup): Promise<BackupArtifact> {
-  const estimatedPayloadBytes = prepared.data.reduce((total, entry) => total + entry.bytes.byteLength, 0)
-    + prepared.media.reduce((total, entry) => total + entry.blob.size, 0)
-  if (estimatedPayloadBytes > MAX_BLOB_BACKUP_BYTES) {
-    throw new Error('backup_requires_opfs')
-  }
+function opfsStorage(): OpfsStorageManagerLike | null {
+  if (typeof navigator === 'undefined' || !navigator.storage) return null
+  const storage = navigator.storage as unknown as OpfsStorageManagerLike
+  return typeof storage.getDirectory === 'function' ? storage : null
+}
 
-  const blob = await writePreparedBackupToZip(prepared)
-  const bytes = await blob.arrayBuffer()
-  const file = new File([blob], backupFilename(prepared.manifest.createdAt), { type: 'application/zip' })
+async function writePreparedBackupToOpfs(prepared: PreparedCompleteBackup): Promise<File | null> {
+  const storage = opfsStorage()
+  if (!storage?.getDirectory) return null
+
+  const filename = backupFilename(prepared.manifest.createdAt)
+  const directory = await storage.getDirectory()
+  const handle = await directory.getFileHandle(filename, { create: true })
+  const writable = await handle.createWritable()
+  const writer = new ZipWriter(writable)
+
+  for (const entry of sortedData(prepared)) {
+    await writer.add(entry.path, new Uint8ArrayReader(entry.bytes))
+  }
+  for (const entry of sortedMedia(prepared)) {
+    await writer.add(entry.path, new BlobReader(entry.blob), { level: 0 })
+  }
+  await writer.add('manifest.json', new Uint8ArrayReader(encodeBackupJson(prepared.manifest)))
+  await writer.close()
+  return handle.getFile()
+}
+
+function estimatedPayloadBytes(prepared: PreparedCompleteBackup): number {
+  return prepared.data.reduce((total, entry) => total + entry.bytes.byteLength, 0)
+    + prepared.media.reduce((total, entry) => total + entry.blob.size, 0)
+}
+
+async function artifactFromFile(prepared: PreparedCompleteBackup, file: File): Promise<BackupArtifact> {
   return {
     manifest: prepared.manifest,
     filename: file.name,
     bytes: file.size,
-    sha256: await sha256Hex(bytes),
+    sha256: await sha256Hex(await file.arrayBuffer()),
     file,
   }
+}
+
+export async function createCompleteBackupArtifact(prepared: PreparedCompleteBackup): Promise<BackupArtifact> {
+  const opfsFile = await writePreparedBackupToOpfs(prepared)
+  if (opfsFile) return artifactFromFile(prepared, opfsFile)
+
+  if (estimatedPayloadBytes(prepared) > MAX_BLOB_BACKUP_BYTES) {
+    throw new Error('backup_requires_opfs')
+  }
+
+  const blob = await writePreparedBackupToBlob(prepared)
+  const file = new File([blob], backupFilename(prepared.manifest.createdAt), { type: 'application/zip' })
+  return artifactFromFile(prepared, file)
 }
