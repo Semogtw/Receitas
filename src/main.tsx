@@ -7,6 +7,7 @@ import './styles/base.css'
 import './styles/auth.css'
 import './styles/recipes.css'
 import './styles/recipe-controls.css'
+import './styles/planner.css'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('Application root element is missing')
