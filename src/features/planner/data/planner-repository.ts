@@ -97,7 +97,7 @@ function mapMealPlanEntry(row: DatabaseRow): MealPlanEntry {
     pairId: String(row.pair_id),
     recipeId: String(row.recipe_id),
     date: String(row.planned_date),
-    mealPeriodId: String(row.meal_period_id),
+    mealPeriodId: typeof row.meal_period_id === 'string' ? row.meal_period_id : null,
     time: typeof row.planned_time === 'string' ? row.planned_time : null,
     servings: numerator !== null && denominator !== null ? { numerator, denominator } : null,
     note: typeof row.note === 'string' ? row.note : null,
@@ -224,12 +224,7 @@ export class PlannerRepository {
   async upsertEntry(input: MealPlanEntryInput & { id?: string }): Promise<string> {
     const normalized = this.normalizeEntryInput(input)
     const id = input.id ?? crypto.randomUUID()
-    const row = input.id
-      ? await this.database.getOptional<DatabaseRow>(
-          'SELECT * FROM meal_plan_entries WHERE id = ? AND pair_id = ? LIMIT 1',
-          [input.id, this.scope.pairId],
-        )
-      : null
+    const row = input.id ? await this.activeRow('meal_plan_entries', input.id) : null
     const now = new Date().toISOString()
 
     if (!row) {
@@ -275,7 +270,6 @@ export class PlannerRepository {
         planned_time: normalized.time,
         ...servingsColumns(normalized.servings),
         note: normalized.note,
-        deleted_at: null,
         updated_at: now,
       },
     }))
@@ -295,25 +289,6 @@ export class PlannerRepository {
       operation: 'soft_delete',
       ...base,
       next: { ...current, deleted_at: now, updated_at: now },
-    }))
-  }
-
-  async restoreEntry(id: string): Promise<void> {
-    const row = await this.database.getOptional<DatabaseRow>(
-      'SELECT * FROM meal_plan_entries WHERE id = ? AND pair_id = ? AND deleted_at IS NOT NULL LIMIT 1',
-      [id, this.scope.pairId],
-    )
-    if (!row) throw new Error('Deleted meal plan entry not found')
-    const current = payloadFromRow(row)
-    const base = await resolveMutationBase(this.database, 'meal_plan_entries', id, current)
-    await this.writeMutation(this.database, createMutationEnvelope({
-      pairId: this.scope.pairId,
-      actorUserId: this.scope.actorUserId,
-      entityType: 'meal_plan_entries',
-      entityId: id,
-      operation: 'update',
-      ...base,
-      next: { ...current, deleted_at: null, updated_at: new Date().toISOString() },
     }))
   }
 
