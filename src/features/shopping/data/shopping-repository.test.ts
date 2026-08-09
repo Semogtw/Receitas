@@ -57,6 +57,7 @@ function fakeDatabase(options: {
   maxPosition?: number | null
 } = {}) {
   const lists = options.lists ?? [listRow(listId), listRow(defaultListId, true)]
+  const hasItemOverride = Object.prototype.hasOwnProperty.call(options, 'item')
   return {
     getOptional: vi.fn(async (sql: string, params?: unknown[]) => {
       if (sql.includes('mutation_outbox')) return null
@@ -65,7 +66,7 @@ function fakeDatabase(options: {
         const id = params?.[0]
         return lists.find((row) => row.id === id) ?? null
       }
-      if (sql.includes('shopping_items')) return options.item ?? itemRow()
+      if (sql.includes('shopping_items')) return hasItemOverride ? options.item ?? null : itemRow()
       return null
     }),
     getAll: vi.fn(async (sql: string) => {
@@ -189,7 +190,15 @@ describe('ShoppingRepository', () => {
     expect(envelopes[1]?.next.checked).toBe(1)
   })
 
-  it('soft deletes only the selected shopping item', async () => {
+  it('does not reinterpret an edit of a deleted or missing item as a restore', async () => {
+    const envelopes: MutationEnvelope[] = []
+    const repository = new ShoppingRepository(fakeDatabase({ item: null }), scope, writerInto(envelopes))
+
+    await expect(repository.updateItem(itemId, { purchased: true })).rejects.toThrow('Shopping item not found')
+    expect(envelopes).toHaveLength(0)
+  })
+
+  it('soft deletes only the selected shopping item with the sync-contract operation', async () => {
     const envelopes: MutationEnvelope[] = []
     const repository = new ShoppingRepository(fakeDatabase({ item: itemRow() }), scope, writerInto(envelopes))
 
