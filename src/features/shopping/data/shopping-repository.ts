@@ -251,15 +251,6 @@ export class ShoppingRepository {
     }))
   }
 
-  async restoreItem(id: string): Promise<void> {
-    const row = await this.database.getOptional<DatabaseRow>(
-      'SELECT * FROM shopping_items WHERE id = ? AND pair_id = ? AND deleted_at IS NOT NULL LIMIT 1',
-      [id, this.scope.pairId],
-    )
-    if (!row) throw new Error('Deleted shopping item not found')
-    await this.updateRow('shopping_items', row, { deleted_at: null, updated_at: new Date().toISOString() })
-  }
-
   private async addItemWithSources(
     listId: string,
     draft: ShoppingItemDraft,
