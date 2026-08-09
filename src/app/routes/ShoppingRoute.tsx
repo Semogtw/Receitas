@@ -5,6 +5,7 @@ import { useAuth } from '../../features/auth/AuthProvider'
 import { PlannerRepository } from '../../features/planner/data/planner-repository'
 import { ConversionProfileRepository } from '../../features/recipes/data/conversion-profile-repository'
 import { RecipeRepository, type RecipeSummary } from '../../features/recipes/data/recipe-repository'
+import { DEFAULT_CONVERSION_PROFILES } from '../../features/recipes/domain/default-conversion-profiles'
 import type { ConversionProfile } from '../../features/recipes/domain/types'
 import { AddRecipesToShopping, type RecipeGenerationRequest } from '../../features/shopping/components/AddRecipesToShopping'
 import { ShoppingListDetail } from '../../features/shopping/components/ShoppingListDetail'
@@ -145,9 +146,16 @@ export function ShoppingRoute() {
     return selections
   }
 
+  function consolidate(items: ShoppingItemDraft[]) {
+    return consolidateShoppingItems(items, {
+      defaultProfiles: DEFAULT_CONVERSION_PROFILES,
+      pairOverrides: conversionProfiles,
+    })
+  }
+
   async function buildRecipePreview(requests: RecipeGenerationRequest[]) {
     const selections = await buildRecipeSelections(requests)
-    return consolidateShoppingItems(generateShoppingItems(selections), { pairOverrides: conversionProfiles })
+    return consolidate(generateShoppingItems(selections))
   }
 
   async function buildPlannerPreview(range: { start: string; end: string }) {
@@ -164,7 +172,7 @@ export function ShoppingRoute() {
         source: { kind: 'planner', recipeId: recipe.id, mealPlanEntryId: entry.id },
       }
     }))
-    return consolidateShoppingItems(generateShoppingItems(selections), { pairOverrides: conversionProfiles })
+    return consolidate(generateShoppingItems(selections))
   }
 
   async function confirmGeneratedItems(generated: ConsolidatedShoppingItem[]) {
