@@ -14,6 +14,14 @@ import {
   type RecipeDraft,
   type RecipeSummary,
 } from '../../features/recipes/data/recipe-repository'
+import { RecipeSearchControls } from '../../features/search/components/RecipeSearchControls'
+import { LocalRecipeSearch } from '../../features/search/data/search-index'
+import {
+  EMPTY_RECIPE_SEARCH_QUERY,
+  searchRecipeDocuments,
+  type RecipeSearchDocument,
+  type RecipeSearchQuery,
+} from '../../features/search/domain/search'
 
 type RecipesRouteMode = 'list' | 'create' | 'view' | 'edit' | 'cook'
 
@@ -28,11 +36,17 @@ function formatMinutes(seconds: number | null): string | null {
   return `${Math.round(seconds / 60)} min`
 }
 
+function formatRating(value: number): string {
+  return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(value)
+}
+
 export function RecipesRoute() {
   const auth = useAuth()
   const database = usePowerSyncDatabase()
   const [mode, setMode] = useState<RecipesRouteMode>('list')
   const [recipes, setRecipes] = useState<RecipeSummary[]>([])
+  const [searchDocuments, setSearchDocuments] = useState<RecipeSearchDocument[]>([])
+  const [searchQuery, setSearchQuery] = useState<RecipeSearchQuery>({ ...EMPTY_RECIPE_SEARCH_QUERY })
   const [categories, setCategories] = useState<RecipeCategory[]>([])
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([])
   const [conversionProfiles, setConversionProfiles] = useState<ConversionProfile[]>([])
@@ -48,12 +62,34 @@ export function RecipesRoute() {
       recipes: new RecipeRepository(database, scope),
       categories: new CategoryRepository(database, scope),
       conversions: new ConversionProfileRepository(database, scope),
+      search: new LocalRecipeSearch(database, auth.pairId),
     }
   }, [auth.userId, auth.pairId, database])
 
+  const searchResults = useMemo(
+    () => searchRecipeDocuments(searchDocuments, searchQuery),
+    [searchDocuments, searchQuery],
+  )
+  const searchResultById = useMemo(
+    () => new Map(searchResults.map((result) => [result.recipeId, result])),
+    [searchResults],
+  )
+  const visibleRecipes = useMemo(() => {
+    const byId = new Map(recipes.map((recipe) => [recipe.id, recipe]))
+    return searchResults.flatMap((result) => {
+      const recipe = byId.get(result.recipeId)
+      return recipe ? [recipe] : []
+    })
+  }, [recipes, searchResults])
+
   const refreshRecipes = useCallback(async () => {
     if (!repositories) return
-    setRecipes(await repositories.recipes.listRecipes())
+    const [rows, documents] = await Promise.all([
+      repositories.recipes.listRecipes(),
+      repositories.search.loadDocuments(),
+    ])
+    setRecipes(rows)
+    setSearchDocuments(documents)
   }, [repositories])
 
   const refreshReferenceData = useCallback(async () => {
@@ -100,13 +136,15 @@ export function RecipesRoute() {
         return
       }
       try {
-        const [rows, nextCategories, nextProfiles] = await Promise.all([
+        const [rows, documents, nextCategories, nextProfiles] = await Promise.all([
           repositories.recipes.listRecipes(),
+          repositories.search.loadDocuments(),
           repositories.categories.listCategories(),
           repositories.conversions.listDensityProfiles(),
         ])
         if (active) {
           setRecipes(rows)
+          setSearchDocuments(documents)
           setCategories(nextCategories)
           setConversionProfiles(nextProfiles)
           setError(null)
@@ -308,11 +346,30 @@ export function RecipesRoute() {
         </div>
       ) : null}
 
-      {recipes.length > 0 ? (
-        <div className="recipe-library" aria-label="Receitas salvas">
-          {recipes.map((recipe) => {
+      {!loading && recipes.length > 0 ? (
+        <RecipeSearchControls
+          query={searchQuery}
+          categories={categories}
+          resultCount={visibleRecipes.length}
+          totalCount={recipes.length}
+          onChange={setSearchQuery}
+        />
+      ) : null}
+
+      {!loading && recipes.length > 0 && visibleRecipes.length === 0 ? (
+        <div className="recipe-library-empty">
+          <h2>Nenhuma receita corresponde à busca</h2>
+          <p>Remova um filtro ou altere os termos para ampliar os resultados locais.</p>
+          <button type="button" className="button button--quiet" onClick={() => setSearchQuery({ ...EMPTY_RECIPE_SEARCH_QUERY })}>Limpar filtros</button>
+        </div>
+      ) : null}
+
+      {visibleRecipes.length > 0 ? (
+        <div className="recipe-library" aria-label="Receitas encontradas">
+          {visibleRecipes.map((recipe) => {
             const time = formatMinutes(recipe.totalTimeSeconds)
             const updated = formatUpdatedAt(recipe.updatedAt)
+            const searchMeta = searchResultById.get(recipe.id)
             return (
               <button
                 key={recipe.id}
@@ -328,6 +385,11 @@ export function RecipesRoute() {
                 {recipe.description ? <span className="recipe-library__description">{recipe.description}</span> : null}
                 <span className="recipe-library__meta">
                   {recipe.wantToMake ? <span>Queremos fazer</span> : null}
+                  {searchMeta?.alreadyMade ? <span>Já fizemos</span> : null}
+                  {searchQuery.sort === 'most_prepared' && searchMeta ? <span>{searchMeta.preparationCount} preparos</span> : null}
+                  {searchQuery.sort === 'best_rated' && searchMeta ? (
+                    <span>{searchMeta.averageRating === null ? 'Sem avaliação' : `★ ${formatRating(searchMeta.averageRating)}`}</span>
+                  ) : null}
                   {time ? <span>{time}</span> : null}
                   {updated ? <span>Atualizada {updated}</span> : null}
                 </span>
