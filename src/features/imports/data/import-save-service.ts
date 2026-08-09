@@ -55,6 +55,27 @@ function ingredientAmount(raw: string, parsedAmount: IngredientAmount | undefine
   return reparsed.parsed?.amount ?? { kind: 'none' }
 }
 
+function validatedImportedSourceUrl(value: string | null, strategy: ImportStrategy): string | null {
+  if (strategy === 'pasted_text') return null
+  const text = value?.trim() ?? ''
+  if (!text || text.length > 4_096) throw new Error('Imported URL source is invalid')
+  try {
+    const url = new URL(text)
+    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password) {
+      throw new Error('Imported URL source is invalid')
+    }
+    return url.href
+  } catch {
+    throw new Error('Imported URL source is invalid')
+  }
+}
+
+function validatedMinutes(value: number | null, label: string): number | null {
+  if (value === null) return null
+  if (!Number.isFinite(value) || value < 0) throw new Error(`${label} must be a non-negative finite number`)
+  return Math.round(value * 60)
+}
+
 export function buildRecipeDraftFromImport(imported: ImportedRecipeDraft): RecipeDraft {
   const title = imported.title?.trim() ?? ''
   if (!title) throw new Error('Imported recipe title is required before saving')
@@ -67,8 +88,8 @@ export function buildRecipeDraftFromImport(imported: ImportedRecipeDraft): Recip
     description: imported.description?.trim() || null,
     baseYield: servings.yield,
     baseYieldUnit: servings.unit,
-    prepTimeSeconds: imported.prepTimeMinutes === null ? null : Math.max(0, Math.round(imported.prepTimeMinutes * 60)),
-    cookTimeSeconds: imported.cookTimeMinutes === null ? null : Math.max(0, Math.round(imported.cookTimeMinutes * 60)),
+    prepTimeSeconds: validatedMinutes(imported.prepTimeMinutes, 'Imported prep time'),
+    cookTimeSeconds: validatedMinutes(imported.cookTimeMinutes, 'Imported cook time'),
     favorite: false,
     wantToMake: false,
     ingredients: imported.ingredients.flatMap((ingredient) => {
@@ -110,6 +131,7 @@ export class ImportSaveService {
   }
 
   async save(imported: ImportedRecipeDraft, strategy: ImportStrategy): Promise<string> {
+    const sourceUrl = validatedImportedSourceUrl(imported.sourceUrl, strategy)
     const draft = buildRecipeDraftFromImport(imported)
     await this.recipes.createRecipe(draft)
 
@@ -132,7 +154,7 @@ export class ImportSaveService {
       next: {
         ...current,
         source_kind: sourceKind,
-        source_url: sourceKind === 'url' ? imported.sourceUrl : null,
+        source_url: sourceUrl,
         updated_at: new Date().toISOString(),
       },
     }))
