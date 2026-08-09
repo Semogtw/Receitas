@@ -1,164 +1,188 @@
 # Status do desenvolvimento
 
-**Atualizado em:** 2026-08-07  
-**Fase atual:** implementação inline em andamento. Planos 01 e 02 estão estruturalmente implementados; gates que dependem de instalar pacotes, executar Supabase local ou provisionar o projeto cloud continuam pendentes e não são tratados como sucesso.
+**Atualizado em:** 2026-08-08  
+**Fase atual:** implementação inline em andamento. Planos 01–05 estão estruturalmente implementados em branches dependentes; gates executáveis que exigem um runner seguro continuam pendentes e não são tratados como sucesso.
 
 ## Gates de processo concluídos
 
-- A especificação final de design em `docs/superpowers/specs/2026-08-07-receitas-design.md` foi **explicitamente aprovada pelo usuário em 2026-08-07**.
+- A especificação final de design em `docs/superpowers/specs/2026-08-07-receitas-design.md` foi explicitamente aprovada pelo usuário em 2026-08-07.
 - A fase `superpowers:writing-plans` foi concluída.
 - O usuário escolheu **Inline Execution** (`superpowers:executing-plans`).
-- Implementação permanece fora de `main` em branches dependentes e com commits frequentes.
+- A implementação permanece fora de `main`, em branches dependentes, com commits/pushes frequentes.
+- Bloqueio ambiental ou de infraestrutura é documentado e o trabalho resolvível por código continua.
 
-> A linha de status antiga no cabeçalho da especificação final foi escrita antes da aprovação. Este arquivo prevalece como status atual: **design aprovado e implementação iniciada**.
+## Linha de implementação
+
+1. `feat/foundation-pwa` — plano 01, foundation PWA;
+2. `feat/backend-auth-data` — plano 02, backend/auth/dados;
+3. `feat/local-first-sync` — plano 03, sync local-first e conflitos;
+4. `feat/recipes-cooking-media` — plano 04, receitas/preparo/mídia;
+5. `feat/planning-shopping-search` — plano 05, planner/compras/busca local; branch atual deste checkpoint.
+
+A próxima branch deve ser criada sobre o head do plano 05 para executar o plano 06 (`import-backup-diagnostics`).
 
 ## Plano 01 — Foundation PWA
 
-Branch base: `feat/foundation-pwa`.
+Estruturalmente implementado:
 
-Implementado:
-
-- React 19 + TypeScript + Vite 8;
-- env público tipado para Supabase/PowerSync;
+- React + TypeScript + Vite;
+- shell mobile-first e rotas principais;
 - tokens visuais, claro/escuro e base de acessibilidade;
-- shell mobile-first e rotas `/recipes`, `/planner`, `/shopping`, `/history`, `/settings`;
-- iconografia Lucide revisada via @Supericons;
-- `vite-plugin-pwa` com atualização explícita e sem runtime cache privado;
-- SVG fonte + PNGs PWA conferidos por SHA de blob Git;
-- Playwright preparado para Chromium/WebKit desktop e mobile, incluindo iPhone;
-- smoke de navegação e reload offline após service worker pronto.
+- `vite-plugin-pwa` sem runtime cache privado;
+- Playwright preparado para Chromium/WebKit desktop e mobile;
+- smoke de navegação/reload offline escrito.
 
-Commits principais: `19ad1fa`, `2ca289c`, `7d11dcd`, `deb4c4e`, `05d29e1`, `70de416`, `2d1a786`.
+Gates executáveis permanecem pendentes.
 
 ## Plano 02 — Backend, Auth e dados
 
-Branch atual: `feat/backend-auth-data`, criada sobre `feat/foundation-pwa`.
+Estruturalmente implementado:
 
-### Supabase e autenticação fechada
-
-Implementado:
-
-- cliente browser Supabase somente com configuração pública;
-- signup público e login anônimo desativados em `supabase/config.toml`;
+- Supabase browser somente com configuração pública;
+- signup público e login anônimo desativados;
 - confirmação de e-mail obrigatória;
-- bootstrap único protegido por segredo servidor;
-- bootstrap por `admin.inviteUserByEmail()` — senha nunca entra no endpoint e é escolhida pelo próprio usuário;
-- estado privado de bootstrap com lock e consumo permanente;
-- reenvio seguro/idempotente do primeiro convite expirado sem reabrir signup ou recriar `pair`;
-- segunda vaga reservada por convite administrativo do Supabase;
-- membership pendente não passa por RLS até `activated_at`;
-- par fecha somente após a segunda identidade verificada concluir a reserva;
-- aceitação do segundo convite é idempotente;
-- nenhum token adicional do domínio passa pela URL do navegador;
-- logout usa escopo local do Supabase;
-- auth-scope local existe somente como otimização de disponibilidade offline e é invalidado quando uma checagem online negar membership;
-- recuperação de senha por e-mail com mensagem anti-enumeração e erro real de transporte separado;
-- UI pública fechada para login, recovery, setup protegido, finalização de convite e atualização de senha;
-- settings só oferece convite da segunda pessoa enquanto o par estiver aberto.
+- bootstrap único servidor e convite seguro para a segunda pessoa;
+- exatamente duas vagas atuais por par;
+- RLS, integridade cross-pair e autoria histórica;
+- recuperação de senha e estados públicos/privados de autenticação;
+- Storage privado pair-scoped;
+- schema para receitas, histórico, planejamento, compras, sync e conflitos.
 
-Decisão técnica normativa: `docs/decisions/2026-08-07-supabase-invitation-auth-lifecycle.md`.
+Decisão normativa: `docs/decisions/2026-08-07-supabase-invitation-auth-lifecycle.md`.
 
-### Banco e RLS
+As migrations atuais vão de `0001_core_identity.sql` a `0015_media_storage.sql`. O contrato semântico de mutações está em `0012_semantic_mutations.sql`.
 
-Migrations implementadas:
+Provisionamento de projeto Supabase real, migrations aplicadas, pgTAP/RLS e Advisors continuam pendentes.
 
-- `0001_core_identity.sql` — pair/members/invites e capacidade;
-- `0002_recipe_domain.sql` — receitas, ingredientes, etapas, categorias, mídia, preparos, avaliações, conversões e imports;
-- `0003_planning_domain.sql` — períodos, planejamento, listas e itens de compras;
-- `0004_sync_conflicts.sql` — preservação de conflitos;
-- `0005_identity_helpers.sql` — helper servidor do bootstrap;
-- `0006_bootstrap_reinvite.sql` — state machine recuperável de reinvite;
-- `0007_identity_idempotency.sql` — ativação/aceitação idempotentes;
-- `0008_storage_policies.sql` — Storage privado pair-scoped;
-- `0009_detach_auth_identity.sql` — autoria histórica desacoplada da existência atual da conta Auth;
-- `0010_pair_invite_no_url_secret.sql` — aceitação do segundo membro sem segredo extra na URL;
-- `0011_actor_integrity.sql` — `created_by`/`recorded_by` pertencem ao ator real na criação e ficam imutáveis.
+## Plano 03 — Local-first sync
 
-O modelo já contém os **15 tipos sincronizáveis** esperados pelo plano 03, além de `conflicts` separado.
+Estruturalmente implementado na branch `feat/local-first-sync`:
 
-Invariantes implementadas:
+- schema local PowerSync;
+- mutation outbox semântica;
+- coalescência de mutações pendentes;
+- upload por `apply_client_mutation`;
+- conflitos preservados em vez de sobrescritos silenciosamente;
+- retry/diagnóstico de upload;
+- contrato de resolução e delete permanente em migrations posteriores;
+- escrita local primeiro e sincronização quando a conexão retorna.
 
-- exatamente duas vagas atuais por pair;
-- remover membro não reabre par fechado;
-- associação cross-pair impedida também por FKs compostas `(id, pair_id)`;
-- avaliações 0–10 em incrementos de 0,5, uma ativa por usuário/preparo;
-- cada usuário só escreve a própria avaliação;
-- uma capa ativa por receita;
-- uma lista de compras padrão ativa por par;
-- soft delete e `revision` nas entidades sincronizáveis;
-- autoria histórica não pode ser forjada nem reatribuída posteriormente.
+Checkpoint: `docs/superpowers/checkpoints/2026-08-07-local-first-sync.md`.
 
-### Storage
+Observação: esse checkpoint contém referências históricas a nomes/numeração de migrations que mudaram durante a evolução da branch. O source of truth atual é `supabase/migrations/`, em especial `0012_semantic_mutations.sql` para o RPC semântico.
 
-Bucket privado `recipe-media`:
+## Plano 04 — Receitas, preparo e mídia
 
-- máximo 20 MiB por objeto;
-- JPEG, PNG, WebP, HEIC e HEIF;
-- namespace `<pair_id>/<user_id>/...`;
-- SELECT apenas para membro do par;
-- INSERT apenas no namespace do próprio `auth.uid()`;
-- browser sem policy de overwrite ou delete físico;
-- exclusão de produto continua lógica; limpeza física será privilegiada.
+Estruturalmente implementado na branch `feat/recipes-cooking-media`:
 
-### Testes escritos, ainda não executados
+- repositório e editor local-first de receitas;
+- ingredientes, etapas e categorias;
+- quantidades racionais/textuais e escalonamento;
+- perfis de conversão conservadores;
+- detalhe e modo de preparo;
+- sessões de preparo, avaliações e fotos;
+- fluxo de mídia privado coerente com o Storage do par.
 
-- `supabase/tests/identity_rls.sql`;
-- `supabase/tests/identity_idempotency.sql`;
-- `supabase/tests/domain_rls.sql`;
-- `supabase/tests/storage_rls.sql`;
-- `supabase/tests/actor_integrity.sql`;
-- testes Deno dos services de bootstrap/reinvite/pair-invite;
-- testes Vitest de auth scope, invite completion e app gate.
+Progresso detalhado: `docs/superpowers/progress/2026-08-07-recipes-cooking-media.md`.
 
-A revisão estática de segurança também removeu uma credencial de domínio redundante que inicialmente apareceria na query string do convite do segundo membro.
+## Plano 05 — Planejamento, compras e busca local
 
-## Bloqueios ambientais conhecidos
+Estruturalmente implementado na branch `feat/planning-shopping-search`.
 
-### Dependências Node
+### Planner
 
-O runner desta sessão usa Node `22.16.0`, enquanto o alvo do projeto é Node 24. Mais importante: o ambiente não consegue acessar `registry.npmjs.org`.
+- períodos de refeição definidos pelo próprio par;
+- agenda semanal date-only, sem conversão indevida de fuso;
+- horário local opcional;
+- porções racionais e observações;
+- criação, edição e soft delete local-first;
+- entradas antigas sem período continuam visíveis em `Sem período`;
+- nenhuma infraestrutura de lembrete/notificação foi adicionada.
 
-Por isso, **não foram executados nem declarados como verdes**:
+### Compras
 
-- geração de `pnpm-lock.yaml`;
-- `pnpm lint`;
+- múltiplas listas nomeadas;
+- uma única lista padrão ativa por par;
+- itens manuais, editáveis, marcáveis e removíveis;
+- geração por receitas ou intervalo do planner;
+- escala por porções antes da consolidação;
+- prévia editável antes de persistir;
+- proveniência completa preservada em itens consolidados;
+- quantidades textuais não são somadas automaticamente;
+- massa↔volume só cruza com perfil de densidade conhecido;
+- overrides do par têm precedência sobre catálogo padrão curado.
+
+### Busca local
+
+- busca em dados canônicos locais, sem request remoto por tecla;
+- título, descrição, ingredientes, categorias e observações;
+- comparação case/accent-insensitive em português;
+- filtros por categoria, favorita, `Queremos fazer` e `Já fizemos`;
+- múltiplas categorias selecionadas são conjuntivas;
+- ordenação por recente, nome, mais preparada e melhor avaliada;
+- ausência de avaliação permanece `null`, nunca nota zero.
+
+### Revisão do sync
+
+O caminho `repository → mutation_outbox → PowerSyncConnector → apply_client_mutation` foi revisado estaticamente.
+
+`0012_semantic_mutations.sql` já aceita planner e shopping. A revisão detectou e corrigiu métodos de restauração que tentavam limpar `deleted_at` via `update`, operação proibida pelo contrato servidor. Edição de item/entrada deletada ou ausente agora falha sem enfileirar mutação inválida.
+
+Progresso detalhado: `docs/superpowers/progress/2026-08-08-planning-shopping-search.md`.
+
+## Testes escritos, ainda não executados neste ambiente
+
+A base contém cobertura Vitest/Testing Library/SQL/Deno/Playwright para as áreas implementadas, incluindo novos testes de planner, compras, consolidação, proveniência e busca local.
+
+Não foram declarados como verdes nesta sessão:
+
 - `pnpm typecheck`;
 - `pnpm test:run`;
 - `pnpm build`;
-- Playwright;
-- geração oficial dos assets pelo pacote PWA.
+- `pnpm test:e2e:smoke`;
+- Playwright cross-browser/rendered QA;
+- pgTAP/RLS em Supabase real;
+- testes/deploy de Edge Functions em projeto hospedado.
 
-### Supabase local/cloud
+## Bloqueios ambientais e de segurança conhecidos
 
-Não existe ainda um projeto cloud `Receitas` no Supabase conectado e o CLI não pôde ser instalado no runner atual.
+### Runner Node / Actions
 
-Logo, continuam pendentes:
+O histórico do runner desta linha de trabalho não conseguiu instalar dependências de `registry.npmjs.org`, e o projeto exige usar o repositório de toolchains para Actions/checkout quando necessário.
 
-- aplicar migrations num Postgres Supabase real;
+O toolchain disponível, `Semogtw/Offline-Toolchains`, é público. Executar nele checkout/testes de `Semogtw/Receitas` (privado) pode expor nomes de arquivos, stack traces ou trechos de fonte privada em logs públicos. Por isso não foi criado um workflow inseguro apenas para obter um gate verde.
+
+É necessário um runner/toolchain privado ou outro caminho que mantenha os logs privados para executar os gates completos com segurança.
+
+### Playwright autenticado
+
+O smoke atual pressupõe acesso às rotas protegidas, mas ainda não há fixture E2E autenticada autocontida/segura no repositório. E2E planner→compras→offline→reconexão e busca offline precisa dessa fixture antes de virar gate confiável.
+
+### Supabase real
+
+Ainda permanecem pendentes:
+
+- aplicar migrations num projeto Supabase real;
 - executar pgTAP/RLS de verdade;
 - executar testes/deploy de Edge Functions;
-- configurar o projeto hospedado com password minimum >= 12 e redirects/origins finais;
-- gerar `Database` TypeScript a partir do schema realmente aplicado;
+- configurar password minimum/redirects/origins finais;
+- gerar tipos `Database` a partir do schema realmente aplicado;
 - rodar Advisors/security checks do projeto hospedado.
 
-O conector Supabase exige explicitamente escolher organização e confirmar custo antes de criar projeto. Esse provisionamento será feito somente quando necessário e com esse gate explícito; nenhum projeto pago será criado automaticamente.
+Nenhum projeto pago deve ser criado automaticamente. Custo recorrente obrigatório continua **US$ 0**.
 
 ## Próximos planos
 
-1. `2026-08-07-01-foundation-pwa.md` — estruturalmente implementado; gates executáveis pendentes.
-2. `2026-08-07-02-backend-auth-data.md` — estruturalmente implementado; Supabase real/tipos/gates pendentes.
-3. `2026-08-07-03-local-first-sync.md` — próximo em execução.
-4. `2026-08-07-04-recipes-cooking-media.md`
-5. `2026-08-07-05-planning-shopping-search.md`
-6. `2026-08-07-06-import-backup-diagnostics.md`
-7. `2026-08-07-07-hardening-deploy-release.md`
+1. planos 01–05 — estruturalmente implementados; gates executáveis pendentes;
+2. `2026-08-07-06-import-backup-diagnostics.md` — próximo em execução;
+3. `2026-08-07-07-hardening-deploy-release.md` — depois do plano 06.
 
 ## Método de execução
 
 - `superpowers:executing-plans` inline;
 - branch dependente por grande plano enquanto `main` permanece intacta;
 - TDD e gates definidos nos planos;
-- commits frequentes;
+- commits/pushes frequentes;
 - bloqueio ambiental é documentado e não impede trabalho resolvível por código;
 - @Context7 para APIs atuais, @Supericons para iconografia, @Build Web Apps/Playwright para QA quando disponíveis, metodologia Codex Security nas superfícies sensíveis.
 
