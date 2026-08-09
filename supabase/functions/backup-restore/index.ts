@@ -1,10 +1,10 @@
 import { withCorsAndErrors } from '../_shared/http.ts'
 import { createServerClient, getRequestUserId } from '../_shared/server.ts'
+import { finalizeRestoreStagingStrict } from './finalize.ts'
 import {
   activePairForUser,
   confirmRestoreMedia,
   createRestoreJob,
-  finalizeRestoreStaging,
   prepareRestoreMediaUpload,
   readRestoreJobSummary,
   stageRestoreDataBatch,
@@ -47,6 +47,7 @@ function publicError(error: unknown): Response {
     || code.includes('expired')
     || code.includes('already_confirmed')
     || code.includes('not_validating')
+    || code.includes('not_ready')
   ) {
     return json(409, { error: 'restore_job_state_conflict' })
   }
@@ -59,6 +60,7 @@ function publicError(error: unknown): Response {
     || code.includes('batch')
     || code.includes('file_')
     || code.includes('media_')
+    || code.includes('photo_')
     || code.includes('pair_scope')
     || code.includes('forbidden_restore_field')
     || code.includes('unsupported_restore_format')
@@ -118,7 +120,7 @@ const handler = async (request: Request): Promise<Response> => {
         return json(200, { ok: true })
       }
       case 'finalize_staging': {
-        const job = await finalizeRestoreStaging(admin, userId, pairId, body)
+        const job = await finalizeRestoreStagingStrict(admin, userId, pairId, body.jobId)
         return json(200, { job })
       }
       case 'get_job': {
