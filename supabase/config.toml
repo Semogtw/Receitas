@@ -47,3 +47,6 @@ verify_jwt = true
 
 [functions.import-url]
 verify_jwt = true
+
+[functions.backup-restore]
+verify_jwt = true
