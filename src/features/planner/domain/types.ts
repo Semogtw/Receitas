@@ -18,9 +18,10 @@ export interface MealPlanEntryInput {
   note: string | null
 }
 
-export interface MealPlanEntry extends MealPlanEntryInput {
+export interface MealPlanEntry extends Omit<MealPlanEntryInput, 'mealPeriodId'> {
   id: string
   pairId: string
+  mealPeriodId: string | null
   revision: number
   deletedAt: string | null
 }
