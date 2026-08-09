@@ -53,3 +53,41 @@ export async function readJsonObject(request: Request): Promise<Record<string, u
   }
   return value as Record<string, unknown>
 }
+
+function responseWithCors(request: Request, response: Response): Response {
+  const headers = new Headers(response.headers)
+  for (const [name, value] of Object.entries(corsHeadersFor(request))) {
+    if (typeof value === 'string') headers.set(name, value)
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
+}
+
+/**
+ * Wrapper for newer Edge handlers that centralizes OPTIONS/origin handling and
+ * ensures ordinary handler responses carry the same strict CORS headers as the
+ * older explicit jsonResponse() call sites.
+ */
+export function withCorsAndErrors(
+  handler: (request: Request) => Promise<Response> | Response,
+): (request: Request) => Promise<Response> {
+  return async (request: Request) => {
+    if (request.method === 'OPTIONS') return preflightResponse(request)
+    if (!requestOriginAllowed(request)) {
+      return jsonResponse(request, { error: 'origin_not_allowed' }, 403)
+    }
+
+    try {
+      return responseWithCors(request, await handler(request))
+    } catch (error) {
+      if (error instanceof Error && error.message === 'authentication_required') {
+        return jsonResponse(request, { error: 'authentication_required' }, 401)
+      }
+      console.error('edge_handler_internal_error', error instanceof Error ? error.message : 'unknown')
+      return jsonResponse(request, { error: 'internal_error' }, 500)
+    }
+  }
+}
