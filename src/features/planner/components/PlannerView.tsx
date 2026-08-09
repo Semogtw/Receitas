@@ -15,11 +15,49 @@ interface PlannerViewProps {
   onOpenPeriodSettings: () => void
 }
 
+interface PlannerEntryListProps {
+  entries: readonly MealPlanEntry[]
+  recipeById: ReadonlyMap<string, RecipeSummary>
+  onEdit: (entry: MealPlanEntry) => void
+  onDelete: (entry: MealPlanEntry) => void
+}
+
 function servingLabel(entry: MealPlanEntry): string | null {
   if (!entry.servings) return null
   const { numerator, denominator } = entry.servings
   if (denominator === 1) return `${numerator} porç${numerator === 1 ? 'ão' : 'ões'}`
   return `${numerator}/${denominator} porções`
+}
+
+function PlannerEntryList({ entries, recipeById, onEdit, onDelete }: PlannerEntryListProps) {
+  return (
+    <div className="planner-period__entries">
+      {entries.map((entry) => {
+        const recipe = recipeById.get(entry.recipeId)
+        const servings = servingLabel(entry)
+        return (
+          <article className="planner-entry" key={entry.id}>
+            <button type="button" className="planner-entry__body" onClick={() => onEdit(entry)}>
+              <strong>{recipe?.title ?? 'Receita indisponível localmente'}</strong>
+              <span className="planner-entry__meta">
+                {entry.time ? <span><Clock3 aria-hidden="true" /> {entry.time.slice(0, 5)}</span> : null}
+                {servings ? <span>{servings}</span> : null}
+              </span>
+              {entry.note ? <span className="planner-entry__note">{entry.note}</span> : null}
+            </button>
+            <button
+              type="button"
+              className="icon-button planner-entry__delete"
+              aria-label={`Remover ${recipe?.title ?? 'refeição'} do planejamento`}
+              onClick={() => onDelete(entry)}
+            >
+              <Trash2 aria-hidden="true" />
+            </button>
+          </article>
+        )
+      })}
+    </div>
+  )
 }
 
 export function PlannerView({
@@ -36,6 +74,7 @@ export function PlannerView({
   const dates = weekDates(selectedDate)
   const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]))
   const entriesForDate = entries.filter((entry) => entry.date === selectedDate)
+  const unassignedEntries = entriesForDate.filter((entry) => entry.mealPeriodId === null)
 
   return (
     <section className="planner-workspace" aria-labelledby="planner-title">
@@ -115,6 +154,19 @@ export function PlannerView({
           </div>
         ) : null}
 
+        {unassignedEntries.length > 0 ? (
+          <section className="planner-period planner-period--unassigned" aria-labelledby="planner-period-unassigned">
+            <header className="planner-period__header">
+              <div>
+                <h3 id="planner-period-unassigned">Sem período</h3>
+                <small>Escolha um período ao editar estas refeições.</small>
+              </div>
+              <span>{unassignedEntries.length}</span>
+            </header>
+            <PlannerEntryList entries={unassignedEntries} recipeById={recipeById} onEdit={onEdit} onDelete={onDelete} />
+          </section>
+        ) : null}
+
         {periods.map((period) => {
           const periodEntries = entriesForDate.filter((entry) => entry.mealPeriodId === period.id)
           return (
@@ -129,32 +181,7 @@ export function PlannerView({
                   <Plus aria-hidden="true" /> Adicionar refeição
                 </button>
               ) : (
-                <div className="planner-period__entries">
-                  {periodEntries.map((entry) => {
-                    const recipe = recipeById.get(entry.recipeId)
-                    const servings = servingLabel(entry)
-                    return (
-                      <article className="planner-entry" key={entry.id}>
-                        <button type="button" className="planner-entry__body" onClick={() => onEdit(entry)}>
-                          <strong>{recipe?.title ?? 'Receita indisponível localmente'}</strong>
-                          <span className="planner-entry__meta">
-                            {entry.time ? <span><Clock3 aria-hidden="true" /> {entry.time.slice(0, 5)}</span> : null}
-                            {servings ? <span>{servings}</span> : null}
-                          </span>
-                          {entry.note ? <span className="planner-entry__note">{entry.note}</span> : null}
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-button planner-entry__delete"
-                          aria-label={`Remover ${recipe?.title ?? 'refeição'} do planejamento`}
-                          onClick={() => onDelete(entry)}
-                        >
-                          <Trash2 aria-hidden="true" />
-                        </button>
-                      </article>
-                    )
-                  })}
-                </div>
+                <PlannerEntryList entries={periodEntries} recipeById={recipeById} onEdit={onEdit} onDelete={onDelete} />
               )}
             </section>
           )
