@@ -5,6 +5,7 @@ import { SyncStatus } from '../features/sync/SyncStatus'
 export function AppShell() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
+  const showImportShortcut = pathname === '/recipes'
 
   return (
     <div className="app-shell">
@@ -14,7 +15,10 @@ export function AppShell() {
             <span className="app-brand__mark" aria-hidden="true">R</span>
             <span>Caderno de receitas</span>
           </Link>
-          <SyncStatus onOpenConflicts={() => navigate('/conflicts')} />
+          <div className="app-header__actions">
+            {showImportShortcut ? <Link className="button button--quiet app-header__import" to="/recipes/import">Importar</Link> : null}
+            <SyncStatus onOpenConflicts={() => navigate('/conflicts')} />
+          </div>
         </div>
       </header>
 
