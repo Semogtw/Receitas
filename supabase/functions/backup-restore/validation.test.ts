@@ -155,14 +155,8 @@ Deno.test('final server validation rejects missing, gapped and adulterated batch
   )
 
   const recipes = batches.find((batch) => batch.path === 'data/recipes.json')!
-  const splitManifest = {
-    ...manifest,
-    dataFiles: manifest.dataFiles.map((descriptor) => descriptor.path === recipes.path
-      ? descriptor
-      : descriptor),
-  }
   await assertRejects(
-    () => rebuildAndValidateDataFiles(splitManifest, [
+    () => rebuildAndValidateDataFiles(manifest, [
       ...batches.filter((batch) => batch.path !== recipes.path),
       { ...recipes, batchIndex: 1 },
     ]),
@@ -173,7 +167,7 @@ Deno.test('final server validation rejects missing, gapped and adulterated batch
     () => rebuildAndValidateDataFiles(manifest, batches.map((batch) => batch.path === 'data/recipes.json'
       ? { ...batch, payload: [{ id: 'recipe-2', pair_id: pairId }] }
       : batch)),
-    'restore_file_size_mismatch',
+    'restore_file_checksum_mismatch',
   )
 })
 
@@ -206,7 +200,7 @@ Deno.test('staged media must exactly match every manifest descriptor', async () 
     sha256: descriptor.sha256,
     byteSize: descriptor.bytes,
     mediaType: descriptor.mediaType,
-    storagePath: `restore-staging/${pairId}/job-1/photo-1.webp`,
+    storagePath: `${pairId}/job-1/photo-1.webp`,
   }])
   assertThrows(() => validateStagedMedia(manifest, []), 'count_mismatch')
   assertThrows(() => validateStagedMedia(manifest, [{
@@ -214,6 +208,6 @@ Deno.test('staged media must exactly match every manifest descriptor', async () 
     sha256: '0'.repeat(64),
     byteSize: descriptor.bytes,
     mediaType: descriptor.mediaType,
-    storagePath: 'restore-staging/x',
+    storagePath: `${pairId}/job-1/photo-1.webp`,
   }]), 'descriptor_mismatch')
 })
