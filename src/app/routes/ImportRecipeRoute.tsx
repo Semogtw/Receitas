@@ -2,12 +2,22 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { usePowerSyncDatabase } from '../../data/PowerSyncProvider'
 import { useAuth } from '../../features/auth/AuthProvider'
+import { recordDiagnosticSafely } from '../../features/diagnostics/record'
 import { ImportRecipe } from '../../features/imports/components/ImportRecipe'
 import { ImportReview } from '../../features/imports/components/ImportReview'
 import { ImportClient, type ImportFunctionsClient, type ImportPreview, type ImportStrategy } from '../../features/imports/data/import-client'
 import { ImportSaveService } from '../../features/imports/data/import-save-service'
 import type { ImportedRecipeDraft } from '../../features/imports/domain/normalize-import'
 import { getSupabaseClient } from '../../lib/supabase/client'
+
+function importSaveErrorCode(error: unknown): string {
+  if (!(error instanceof Error)) return 'save_unknown'
+  if (error.message.includes('source is invalid')) return 'source_invalid'
+  if (error.message.includes('title is required')) return 'title_missing'
+  if (error.message.includes('time')) return 'time_invalid'
+  if (error.message.includes('source metadata')) return 'source_metadata_failed'
+  return 'save_failed'
+}
 
 export function ImportRecipeRoute() {
   const auth = useAuth()
@@ -33,12 +43,38 @@ export function ImportRecipeRoute() {
     setError(null)
     try {
       await saveService.save(draft, strategy)
+      void recordDiagnosticSafely(database, {
+        area: 'import',
+        severity: 'info',
+        code: 'save_completed',
+        technicalContext: { importStrategy: strategy },
+      })
       navigate('/recipes', { replace: true })
-    } catch {
+    } catch (cause) {
+      void recordDiagnosticSafely(database, {
+        area: 'import',
+        severity: 'error',
+        code: 'save_failed',
+        technicalContext: {
+          importStrategy: strategy,
+          errorCode: importSaveErrorCode(cause),
+        },
+      })
       setError('Não foi possível salvar a receita importada neste dispositivo. A revisão continua aberta para você tentar novamente.')
     } finally {
       setSaving(false)
     }
+  }
+
+  function acceptPreview(next: ImportPreview) {
+    setPreview(next)
+    setError(null)
+    void recordDiagnosticSafely(database, {
+      area: 'import',
+      severity: next.draft.warnings.length > 0 ? 'warning' : 'info',
+      code: 'preview_ready',
+      technicalContext: { importStrategy: next.strategy },
+    })
   }
 
   if (!saveService) {
@@ -65,7 +101,7 @@ export function ImportRecipeRoute() {
       ) : (
         <ImportRecipe
           client={importClient}
-          onPreview={(next) => { setPreview(next); setError(null) }}
+          onPreview={acceptPreview}
           onCancel={() => navigate('/recipes')}
         />
       )}
