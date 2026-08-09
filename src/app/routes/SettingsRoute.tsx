@@ -1,8 +1,12 @@
 import { PairInviteForm } from '../../features/auth/PairInviteForm'
 import { useAuth } from '../../features/auth/AuthProvider'
+import { CompleteBackupPanel } from '../../features/backup/components/CompleteBackupPanel'
+import { usePowerSyncDatabase } from '../../data/PowerSyncProvider'
+import { APP_VERSION } from '../../lib/app-version'
 
 export function SettingsRoute() {
   const auth = useAuth()
+  const database = usePowerSyncDatabase()
 
   return (
     <section className="route-section settings-page" aria-labelledby="settings-title">
@@ -11,6 +15,10 @@ export function SettingsRoute() {
       <p className="route-intro">Preferências do aplicativo, vínculo do par e opções desta sessão ficam aqui.</p>
 
       <PairInviteForm />
+
+      {auth.pairId ? (
+        <CompleteBackupPanel database={database} pairId={auth.pairId} appVersion={APP_VERSION} />
+      ) : null}
 
       <section className="settings-section" aria-labelledby="session-title">
         <h2 id="session-title">Sessão</h2>
