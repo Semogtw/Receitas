@@ -29,15 +29,16 @@ Motivos:
 - suporte a headers e redirects úteis para CSP, SPA e segurança;
 - reduz a necessidade de executar código servidor no provedor do frontend, já que operações privilegiadas permanecem no Supabase.
 
-Limites atuais relevantes da documentação oficial consultada em 2026-08-07:
+Limites atuais relevantes da documentação oficial consultada em 2026-08-10:
 
 - 500 builds/mês;
 - um build simultâneo;
 - até 20.000 arquivos por site no plano Free;
 - asset individual de até 25 MiB;
-- requests estáticos gratuitos e ilimitados.
+- requests estáticos gratuitos e ilimitados;
+- até 100 regras em `_headers` e até 2.000 caracteres por header individual.
 
-Esses limites são confortáveis para o Receitas.
+Esses limites são confortáveis para o Receitas. O audit de release deve continuar rejeitando assets individuais acima de 25 MiB e o gerador de CSP deve permanecer bem abaixo do limite de header do Pages.
 
 ### Backend — Supabase Free
 
@@ -49,14 +50,15 @@ Responsabilidades:
 - Edge Functions;
 - RLS e autorização remota.
 
-Limites atuais relevantes consultados em 2026-08-07:
+Limites/políticas atuais relevantes consultados em 2026-08-10:
 
 - 500 MB de banco;
 - 1 GB de Storage;
 - 50.000 MAU;
 - 5 GB de egress + 5 GB cached egress;
-- até dois projetos ativos Free;
-- projetos Free podem ser pausados após uma semana de inatividade.
+- até dois projetos ativos Free por conta/organizações em que o usuário é Owner/Admin;
+- projetos Free com baixa atividade podem ser pausados após cerca de uma semana;
+- projeto pausado pode ser retomado no Dashboard durante uma janela atualmente documentada de até 1 ano; depois disso, a recuperação passa pelo backup disponibilizado e migração para outro projeto.
 
 Para exatamente duas pessoas, os limites de usuários e banco são amplos. O recurso mais provável de exigir atenção ao longo do tempo é Storage de fotos, por isso a aplicação deve comprimir/normalizar mídia de forma sensata e continuar suportando backup/exportação.
 
@@ -68,20 +70,20 @@ Responsabilidades:
 - distribuição seletiva dos dados do par;
 - suporte à experiência offline já especificada.
 
-Limites atuais relevantes consultados em 2026-08-07:
+Limites/políticas atuais relevantes consultados em 2026-08-10:
 
 - 2 GB de dados sincronizados por mês;
 - 500 MB hospedados no PowerSync Service;
 - 50 conexões simultâneas de pico;
-- até duas instâncias;
+- até duas instâncias PowerSync Service;
 - uma conexão de banco fonte por instância;
-- projeto Free desativado após uma semana de inatividade.
+- instância Free sem deploys nem conexões de clientes por mais de 7 dias pode ser desprovisionada.
 
 Para duas pessoas, capacidade e concorrência são muito superiores à carga esperada.
 
 ## 3. Hibernação/inatividade dos planos gratuitos
 
-Supabase Free e PowerSync Cloud Free podem pausar/desativar projetos após aproximadamente uma semana de inatividade.
+Supabase Free e PowerSync Cloud Free podem pausar/desprovisionar infraestrutura após períodos de baixa ou nenhuma atividade.
 
 Isso é aceito como trade-off do requisito de custo zero.
 
@@ -91,17 +93,24 @@ Regras de produto/arquitetura:
 - mutações feitas enquanto o backend estiver indisponível ficam pendentes localmente;
 - a UI informa indisponibilidade/sync pendente sem tratar dados locais como perdidos;
 - fotos ainda não confirmadas remotamente permanecem protegidas no dispositivo;
+- rascunho ativo de cozinha permanece device-local e deve sobreviver a reload normal;
 - após retomada dos serviços, filas de sync/upload devem continuar normalmente;
 - não gerar tráfego artificial só para impedir hibernação;
-- instruções operacionais de retomada devem existir antes do primeiro deploy real.
+- instruções operacionais de retomada devem ser exercitáveis e versionadas.
+
+Procedimentos:
+
+- Supabase pausado: `docs/runbooks/supabase-resume.md`;
+- PowerSync desprovisionado: `docs/runbooks/powersync-redeploy.md`;
+- antes de limpar/reinstalar um cliente: `docs/runbooks/incident-data-preservation.md`.
 
 Se a hibernação se tornar problema frequente, reavaliar alternativas gratuitas atuais antes de considerar plano pago.
 
 ## 4. Por que não Vercel como primeira escolha
 
-Vercel Hobby continua sendo uma alternativa válida e gratuita para uso pessoal, mas Cloudflare Pages é preferido aqui por ser uma hospedagem estática simples, com requests de assets estáticos gratuitos/ilimitados documentados e sem necessidade de recursos de framework/serverless específicos da Vercel.
+Vercel Hobby continua sendo uma alternativa possível para uso pessoal, mas Cloudflare Pages é preferido aqui por ser uma hospedagem estática simples, com requests de assets estáticos gratuitos/ilimitados documentados e sem necessidade de recursos de framework/serverless específicos da Vercel.
 
-Vercel pode ser fallback se Cloudflare Pages apresentar incompatibilidade real durante implementação/deploy.
+Vercel só deve entrar como fallback se Cloudflare Pages apresentar incompatibilidade real durante implementação/deploy e a alternativa continuar atendendo custo/privacidade/segurança no momento da decisão.
 
 ## 5. Por que não self-host por padrão
 
@@ -136,9 +145,11 @@ Direção:
 - desenvolvimento local;
 - previews de branch/PR quando o provedor permitir gratuitamente;
 - um ambiente principal de produção;
-- banco/backend de desenvolvimento separado somente se isso puder ser mantido dentro do Free tier sem comprometer produção.
+- banco/backend de desenvolvimento ou staging separado somente se isso puder ser mantido dentro do Free tier sem comprometer produção.
 
 Não duplicar serviços apenas para imitar um pipeline corporativo.
+
+**Trava de segurança desta execução:** o projeto Supabase `fichario-staging` pertence a outro produto e nunca deve receber migrations/functions/configuração do Receitas.
 
 ## 8. Deploy do frontend
 
@@ -160,6 +171,15 @@ Deploy automático do `main` pode ser habilitado quando os testes mínimos estiv
 
 Previews não devem usar segredos administrativos e devem apontar apenas para backend de teste quando seguro.
 
+O build de Pages deve usar:
+
+- Node fixado por `.node-version`;
+- pnpm fixado em `packageManager`;
+- `pnpm build:pages`;
+- output `dist`;
+- somente `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` e `VITE_POWERSYNC_URL` quando necessárias ao browser;
+- nenhum Pages Function para o app estático.
+
 ## 9. Variáveis e segredos
 
 No frontend:
@@ -176,6 +196,8 @@ No backend/provedor:
 - princípio do menor privilégio;
 - rotação possível sem rebuild estrutural do app quando razoável.
 
+O release artifact é auditado para markers/valores privilegiados, `.env`, chaves privadas e source maps antes de deploy.
+
 ## 10. Headers e superfície Web
 
 O deploy deve configurar, conforme compatibilidade da PWA:
@@ -183,25 +205,28 @@ O deploy deve configurar, conforme compatibilidade da PWA:
 - HTTPS obrigatório;
 - Content Security Policy restritiva e testada;
 - `X-Content-Type-Options: nosniff`;
-- política adequada de `Referrer-Policy`;
+- `Referrer-Policy` restritiva;
 - `Permissions-Policy` mínima;
-- proteção contra framing conforme necessidade;
+- proteção contra framing;
+- `X-Robots-Tag`/metadata para desencorajar indexação do app pessoal;
 - caching explícito para assets versionados;
-- cuidado especial para não cachear respostas privadas arbitrárias no service worker.
+- nenhuma runtime cache arbitrária de respostas privadas no service worker.
 
-A política final de headers deve ser testada no app real para não quebrar Auth, Storage, PowerSync ou instalação PWA.
+`pnpm build:pages` gera `_headers` a partir das origens públicas exatas e audita o artefato. A política final ainda precisa ser verificada no origin real do Cloudflare Pages para garantir que não quebre Auth, Storage, PowerSync ou instalação PWA.
 
 ## 11. Operação e recuperação
 
-Antes do uso real, deve existir documentação prática para:
+Runbooks versionados:
 
-- retomar projeto Supabase pausado;
-- reativar/reimplantar instância PowerSync desativada;
-- verificar fila de sync depois da retomada;
-- validar Storage e uploads pendentes;
-- restaurar backup do produto;
-- trocar configuração pública/endpoints quando houver migração;
-- revogar/rotacionar segredos comprometidos.
+- `docs/runbooks/supabase-resume.md` — retomar backend pausado e validar schema/Auth/Storage/Edge/filas;
+- `docs/runbooks/powersync-redeploy.md` — reimplantar regras após desprovisionamento e verificar re-sync/isolamento;
+- `docs/runbooks/incident-data-preservation.md` — preservar mutações, mídia e cooking draft antes de qualquer limpeza local.
+
+Ainda deve existir/exercitar antes da release final:
+
+- drill completo de backup merge + replace-all + safety backup;
+- rotação/revogação de segredo comprometido;
+- rollback de frontend e backend com evidência de staging.
 
 ## 12. Monitoramento de limites
 
@@ -212,7 +237,7 @@ Usar inicialmente os painéis gratuitos dos provedores para acompanhar:
 - tamanho do Postgres;
 - uso de Storage;
 - egress;
-- dados sincronizados no PowerSync;
+- dados sincronizados/hosted e pico de conexões no PowerSync;
 - erros de Edge Functions;
 - estado de deployment.
 
@@ -232,11 +257,12 @@ Se um provedor gratuito mudar suas condições, o objetivo é trocar a camada co
 
 ## 14. Fontes técnicas verificadas
 
-Situação consultada em **2026-08-07**:
+Situação reconsultada em **2026-08-10**:
 
 - PowerSync pricing: https://powersync.com/pricing
-- PowerSync licensing/self-hosting: https://powersync.com/legal/licensing-terms
+- PowerSync usage/inactive instances: https://docs.powersync.com/resources/usage-and-billing
 - Supabase pricing: https://supabase.com/pricing
+- Supabase Free project pausing: https://supabase.com/docs/guides/platform/free-project-pausing
 - Cloudflare Pages limits: https://developers.cloudflare.com/pages/platform/limits/
 - Cloudflare Pages pricing: https://developers.cloudflare.com/pages/functions/pricing/
 
