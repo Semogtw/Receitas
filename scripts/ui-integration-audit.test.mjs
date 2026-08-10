@@ -21,9 +21,21 @@ import './styles/cooking.css'
 import './styles/media.css'
 import './styles/account-admin.css'
 `,
+  recipesRoute: `
+<RecipePhotosPanel runtime={mediaRuntime} />
+<OfflineRecipeAvailability runtime={mediaRuntime} />
+<CookingWorkspace mediaRuntime={mediaRuntime} />
+`,
+  recipeDetail: `
+interface Props { onCook?: () => void }
+<button onClick={onCook}>Cozinhar agora</button>
+`,
+  cookingWorkspace: `
+<CookingSessionPhotosPanel runtime={mediaRuntime} />
+`,
 }
 
-test('accepts the release-critical restore and recovery integration', () => {
+test('accepts the release-critical restore, recovery, cooking and media integration', () => {
   assert.deepEqual(inspectUiIntegration(SAFE), [])
 })
 
@@ -48,4 +60,18 @@ test('rejects release-critical styles disappearing from the bundle', () => {
   const findings = inspectUiIntegration({ ...SAFE, main: "import './styles/cooking.css'" })
   assert(findings.some((finding) => finding.includes('./styles/media.css')))
   assert(findings.some((finding) => finding.includes('./styles/account-admin.css')))
+})
+
+test('rejects recipe media or cooking surfaces becoming unreachable again', () => {
+  const findings = inspectUiIntegration({
+    ...SAFE,
+    recipesRoute: '<CookingWorkspace />',
+    recipeDetail: '<button>Editar receita</button>',
+    cookingWorkspace: '<CookingHistory />',
+  })
+  assert(findings.some((finding) => finding.includes('RecipePhotosPanel')))
+  assert(findings.some((finding) => finding.includes('OfflineRecipeAvailability')))
+  assert(findings.some((finding) => finding.includes('shared media runtime')))
+  assert(findings.some((finding) => finding.includes('cooking mode action')))
+  assert(findings.some((finding) => finding.includes('session photo capture')))
 })
