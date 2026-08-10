@@ -1,6 +1,9 @@
+import { AccountAdminScreen } from '../../features/auth/AccountAdminScreen'
 import { PairInviteForm } from '../../features/auth/PairInviteForm'
 import { useAuth } from '../../features/auth/AuthProvider'
 import { CompleteBackupPanel } from '../../features/backup/components/CompleteBackupPanel'
+import { CompleteRestorePanel } from '../../features/backup/components/CompleteRestorePanel'
+import { ReplaceRestorePanel } from '../../features/backup/components/ReplaceRestorePanel'
 import { DiagnosticsScreen } from '../../features/diagnostics/components/DiagnosticsScreen'
 import { usePowerSyncDatabase } from '../../data/PowerSyncProvider'
 import { APP_VERSION } from '../../lib/app-version'
@@ -20,12 +23,30 @@ export function SettingsRoute() {
       {auth.pairId ? (
         <>
           {auth.userId ? (
-            <CompleteBackupPanel
-              database={database}
-              pairId={auth.pairId}
-              actorUserId={auth.userId}
-              appVersion={APP_VERSION}
-            />
+            <>
+              <CompleteBackupPanel
+                database={database}
+                pairId={auth.pairId}
+                actorUserId={auth.userId}
+                appVersion={APP_VERSION}
+              />
+              <CompleteRestorePanel database={database} />
+              <ReplaceRestorePanel
+                database={database}
+                pairId={auth.pairId}
+                actorUserId={auth.userId}
+                appVersion={APP_VERSION}
+              />
+              {auth.email ? (
+                <AccountAdminScreen
+                  database={database}
+                  pairId={auth.pairId}
+                  actorUserId={auth.userId}
+                  currentEmail={auth.email}
+                  appVersion={APP_VERSION}
+                />
+              ) : null}
+            </>
           ) : null}
           <DiagnosticsScreen database={database} pairId={auth.pairId} appVersion={APP_VERSION} />
         </>
