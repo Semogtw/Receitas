@@ -1,3 +1,45 @@
+.offline-recipe {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.offline-recipe__content {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.offline-recipe__content h2,
+.offline-recipe__content p {
+  margin: 0;
+}
+
+.offline-recipe__content h2 {
+  font-size: var(--font-size-xl);
+}
+
+.offline-recipe__content > p:last-child {
+  color: var(--color-muted);
+}
+
+.offline-recipe__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.offline-recipe__error {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .recipe-photos {
   display: grid;
   gap: var(--space-5);
@@ -173,16 +215,20 @@
 }
 
 @media (max-width: 42rem) {
-  .recipe-photos__add {
+  .offline-recipe {
     grid-template-columns: 1fr;
   }
 
+  .offline-recipe__actions,
+  .recipe-photos__add,
+  .cooking-draft-conflict__actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .offline-recipe__actions .button,
   .recipe-photos__add .button,
   .cooking-draft-conflict__actions .button {
     width: 100%;
-  }
-
-  .cooking-draft-conflict__actions {
-    display: grid;
   }
 }
