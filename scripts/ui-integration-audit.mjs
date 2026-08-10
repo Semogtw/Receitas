@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-export function inspectUiIntegration({ router, settings, main }) {
+export function inspectUiIntegration({ router, settings, main, recipesRoute = '', recipeDetail = '', cookingWorkspace = '' }) {
   const findings = []
 
   const replacementPathIndex = router.indexOf("path: '/auth/finish-replacement'")
@@ -21,17 +21,37 @@ export function inspectUiIntegration({ router, settings, main }) {
     if (!main.includes(`import '${stylesheet}'`)) findings.push(`${stylesheet} must remain included in the application bundle`)
   }
 
+  if (recipesRoute) {
+    for (const component of ['RecipePhotosPanel', 'OfflineRecipeAvailability']) {
+      if (!recipesRoute.includes(`<${component}`)) findings.push(`${component} must remain reachable from recipe detail`)
+    }
+    if (!recipesRoute.includes('mediaRuntime={mediaRuntime')) {
+      findings.push('CookingWorkspace must receive the shared media runtime')
+    }
+  }
+
+  if (recipeDetail && (!recipeDetail.includes('Cozinhar agora') || !recipeDetail.includes('onCook'))) {
+    findings.push('recipe detail must keep an explicit cooking mode action')
+  }
+
+  if (cookingWorkspace && !cookingWorkspace.includes('<CookingSessionPhotosPanel')) {
+    findings.push('finished cooking flow must keep session photo capture reachable')
+  }
+
   return findings
 }
 
 export async function auditUiIntegration(root = process.cwd()) {
-  const [router, settings, main] = await Promise.all([
+  const [router, settings, main, recipesRoute, recipeDetail, cookingWorkspace] = await Promise.all([
     readFile(join(root, 'src', 'app', 'router.tsx'), 'utf8').catch(() => ''),
     readFile(join(root, 'src', 'app', 'routes', 'SettingsRoute.tsx'), 'utf8').catch(() => ''),
     readFile(join(root, 'src', 'main.tsx'), 'utf8').catch(() => ''),
+    readFile(join(root, 'src', 'app', 'routes', 'RecipesRoute.tsx'), 'utf8').catch(() => ''),
+    readFile(join(root, 'src', 'features', 'recipes', 'components', 'RecipeDetail.tsx'), 'utf8').catch(() => ''),
+    readFile(join(root, 'src', 'features', 'cooking', 'components', 'CookingWorkspace.tsx'), 'utf8').catch(() => ''),
   ])
 
-  return inspectUiIntegration({ router, settings, main })
+  return inspectUiIntegration({ router, settings, main, recipesRoute, recipeDetail, cookingWorkspace })
 }
 
 export async function runUiIntegrationAudit(root = process.cwd()) {
