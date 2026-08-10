@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { PowerSyncDatabase } from '@powersync/web'
+import { CookingSessionPhotosPanel } from '../../media/components/CookingSessionPhotosPanel'
+import type { MediaRuntime } from '../../media/media-runtime'
 import type { RecipeAggregate } from '../../recipes/data/recipe-repository'
 import { multiplyRational } from '../../recipes/domain/amount'
 import { createCookingDraft, type CookingDraft } from '../domain/cooking-draft'
@@ -17,12 +19,13 @@ interface CookingWorkspaceProps {
   pairId: string
   actorUserId: string
   recipe: RecipeAggregate
+  mediaRuntime?: MediaRuntime
   onExit(): void
 }
 
 type WorkspaceStage = 'loading' | 'conflict' | 'cooking' | 'finish' | 'finished'
 
-export function CookingWorkspace({ database, pairId, actorUserId, recipe, onExit }: CookingWorkspaceProps) {
+export function CookingWorkspace({ database, pairId, actorUserId, recipe, mediaRuntime, onExit }: CookingWorkspaceProps) {
   const store = useMemo(() => new LocalCookingDraftStore(database), [database])
   const sessions = useMemo(
     () => new CookingRepository(database, { pairId, actorUserId }),
@@ -203,6 +206,15 @@ export function CookingWorkspace({ database, pairId, actorUserId, recipe, onExit
         {error ? <p className="auth-error" role="alert">{error}</p> : null}
         {ratingSaved ? <p className="cooking-workspace__success" role="status">Sua avaliação foi salva.</p> : null}
         <RatingForm onSave={saveRating} />
+        {finishedSessionId && mediaRuntime ? (
+          <CookingSessionPhotosPanel
+            database={database}
+            pairId={pairId}
+            actorUserId={actorUserId}
+            sessionId={finishedSessionId}
+            runtime={mediaRuntime}
+          />
+        ) : null}
         <CookingHistory sessions={history} currentUserId={actorUserId} />
         <button type="button" className="button button--quiet" onClick={onExit}>Voltar à receita</button>
       </section>
