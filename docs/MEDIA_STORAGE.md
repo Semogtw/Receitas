@@ -73,45 +73,46 @@ A migration `0031_media_storage_insert_only.sql` consolida essa política e remo
 
 Cada receita pode ser marcada, por dispositivo, como **Disponível offline**.
 
-Ao ativar essa opção, o aplicativo deve tentar manter localmente:
+Ao ativar essa opção, o aplicativo tenta manter localmente:
 
-- dados estruturados da receita;
-- foto de capa;
-- galeria permanente da receita;
-- fotos do histórico de preparos associado à receita;
-- derivados necessários para visualização;
-- originais das fotos quando essa for a política final escolhida para o modo offline completo.
+- os dados estruturados da receita, já cobertos pelo banco PowerSync local-first;
+- todas as fotos ativas da galeria permanente da receita;
+- todas as fotos ativas dos preparos não excluídos associados à receita.
 
-A implementação pode baixar em fila para não bloquear a interface.
+A preferência fica em `device_preferences` e é **local ao dispositivo**. Ela não é sincronizada obrigatoriamente entre os dois membros.
 
-A UI deve indicar:
+O gerenciador `OfflineRecipeMediaManager` calcula o conjunto diretamente do banco local. Para cada mídia ausente do cache, usa o `MediaRuntime` autenticado para baixar do Storage privado. O componente `OfflineRecipeAvailability`:
 
-- preparando conteúdo offline;
-- disponível offline;
-- parcialmente disponível;
-- falha de download com possibilidade de tentar novamente.
+- mostra estado sem garantia quando a preferência está desligada;
+- mostra disponível quando todo o conjunto conhecido está no cache;
+- mostra parcial quando há arquivos conhecidos ausentes;
+- permite retry manual;
+- reconcilia automaticamente após alterações locais/sincronizadas e no evento de reconexão `online`;
+- mantém a preferência quando algum download falha, para que uma tentativa posterior possa completar o conjunto.
 
-Marcar uma receita como disponível offline é uma preferência **local ao dispositivo**, não uma preferência obrigatoriamente sincronizada entre os dois membros.
+Desativar a opção remove apenas a garantia/preferência local; não apaga metadata nem objetos remotos e não executa limpeza agressiva do cache.
 
-### Estado de implementação
+### Limite da garantia
 
-Esta seção continua sendo requisito de produto. No head de hardening de 2026-08-10, o cache/blob local, resolução de mídia e proteção de uploads pendentes existem, mas a superfície completa de **“Disponibilizar offline” por receita**, com preferência local, download set e estados `downloading/available/partial/error`, ainda não foi implementada. Ela permanece gate aberto de release, não uma funcionalidade implícita do service worker.
+“Disponível offline” é uma garantia **best-effort do aplicativo**, não uma promessa de retenção absoluta do sistema operacional. Cache Storage ainda pode ser removido pelo navegador/plataforma sob pressão de armazenamento. Se isso acontecer, a inspeção volta a reportar estado parcial e o conteúdo sincronizado pode ser recuperado novamente quando houver rede.
+
+Essa implementação está coberta por testes unitários/componentes e integra a suíte E2E de release escrita. O comportamento contra Storage/PowerSync reais continua dependendo do gate de staging antes da release final.
 
 ## 6. Acesso sem internet
 
 Sem conexão:
 
-- capas e miniaturas em cache devem continuar aparecendo;
-- mídias já presentes localmente devem abrir normalmente;
-- receitas marcadas para offline devem funcionar com o máximo de conteúdo previamente baixado quando a feature da seção 5 estiver implementada;
-- uma foto que exista apenas no remoto deve mostrar estado claro de indisponibilidade temporária, sem fingir que o arquivo foi perdido;
-- a ausência do original local não impede acesso aos dados estruturados da receita.
+- mídias já presentes no cache escopado ao par continuam abrindo normalmente;
+- receitas marcadas para offline usam o máximo de conteúdo previamente baixado;
+- uma foto que exista apenas no remoto mostra indisponibilidade temporária em vez de ser tratada como perdida;
+- a ausência do original local não impede acesso aos dados estruturados da receita, que permanecem no banco local-first;
+- reconciliação de downloads pendentes é retomada quando o navegador volta ao estado online.
 
-## 7. Storage remoto
+## 7. Storage remoto e isolamento local
 
 Os originais sincronizados ficam em **Supabase Storage privado**, no bucket `recipe-media`.
 
-Regras:
+Regras remotas:
 
 - não usar bucket público para fotos pessoais;
 - leitura respeita membership ativa do `pair` presente no path;
@@ -119,9 +120,19 @@ Regras:
 - browser não pode atualizar nem apagar fisicamente objetos existentes;
 - caminhos/objetos não substituem RLS ou validações de autorização;
 - URLs de acesso temporário não devem ser tratadas como identificadores permanentes do arquivo;
-- registros do banco devem guardar identidade estável da mídia e referência suficiente para resolver o objeto remoto autorizado.
+- registros do banco guardam identidade estável da mídia e referência suficiente para resolver o objeto remoto autorizado.
 
 `supabase/config.toml`, migrations, frontend e restore devem continuar usando exatamente `recipe-media`; `recipe_media` não é alias válido.
+
+### Cache local por par
+
+O Cache Storage de bytes privados é separado por `pairId + mediaId`. Um mesmo `mediaId` solicitado sob outro par é cache miss, ainda que exista fisicamente no mesmo origin.
+
+Versões antigas usavam chave somente por `mediaId`. Para não perder a única cópia de um upload pendente durante upgrade, existe uma compatibilidade estrita: **somente um job durável da fila cujo `pairId` corresponde ao runtime ativo** pode ler uma chave legada; ao fazê-lo, o blob é migrado para a chave escopada e a chave antiga é removida. Leituras normais de mídia sincronizada nunca usam fallback legado.
+
+O `MediaRuntime` também é construído com o par ativo, rejeita `queuePhoto` cross-pair e centraliza previews/cancelamento de uploads pendentes. Os arquivos PowerSync já são separados por `userId + pairId`, portanto a fila local do usuário anterior não é reutilizada por uma sessão com outro escopo.
+
+No logout, a política local consulta a `mutation_outbox` e a fila real `media_upload_queue_v1`. Uma fila malformada é tratada de forma conservadora como dado local a preservar. Logout não é usado como fronteira de limpeza destrutiva.
 
 ## 8. Integridade e ciclo de vida
 
@@ -135,6 +146,8 @@ Antes de liberar a única cópia local para limpeza, o sistema deve possuir evid
 - não existe erro pendente que deixe o arquivo órfão.
 
 Arquivos órfãos remotos devem ser tratados por rotina segura de reconciliação, nunca por exclusão agressiva baseada apenas em idade.
+
+Cancelar explicitamente um upload remove primeiro o job durável. A limpeza do blob local ocorre depois, em best-effort; isso evita o estado pior em que uma falha de banco deixaria um job persistente apontando para uma única cópia já apagada.
 
 ## 9. Exclusão e lixeira
 
@@ -154,17 +167,17 @@ O fluxo atual é:
 1. o cliente verifica que a row está na lixeira e não possui mutação local pendente;
 2. chama a Edge Function `permanent-delete` enviando somente `entityType` + `entityId`;
 3. a Edge valida o JWT e deriva o par ativo no servidor; `pairId` enviado pelo navegador não é autoridade;
-4. `permanently_delete_entity_server` valida membership e, para uma foto, registra seu `storage_path` em `private.media_delete_queue` **na mesma transação** que remove a metadata;
+4. `permanently_delete_entity_server` valida membership e registra paths de mídia em `private.media_delete_queue` na mesma transação que remove os dados canônicos;
 5. a Edge tenta remover os objetos da fila usando `service_role` no bucket privado;
 6. sucesso remove a entrada da fila; falha incrementa tentativa/erro técnico e mantém o path retryável.
 
 A antiga `permanently_delete_entity(text, uuid, uuid)` é mantida apenas por compatibilidade de migration, mas perde `EXECUTE` de `anon/authenticated` em `0032_media_permanent_delete_queue.sql`.
 
-Essa fila impede que falha do Storage obrigue o produto a dar DELETE físico ao browser ou perca a informação de qual objeto ficou órfão. O processamento periódico/operacional de uma fila que permaneça falhando ainda precisa ser exercitado no staging antes da release final.
+Essa fila impede que falha do Storage obrigue o produto a dar DELETE físico ao browser ou perca a informação de qual objeto ficou órfão. O processamento operacional de uma fila que permaneça falhando ainda precisa ser exercitado no staging antes da release final.
 
 ## 10. Backup
 
-O backup completo deve poder incluir os originais das mídias, independentemente de estarem ou não presentes no cache do dispositivo que iniciou a exportação.
+O backup completo deve incluir os originais das mídias, independentemente de estarem ou não presentes no cache do dispositivo que iniciou a exportação.
 
 Se algum original necessário ao backup estiver apenas no Storage remoto, o processo de backup deve obtê-lo de forma autorizada ou falhar de maneira explícita; não deve substituir silenciosamente o original por miniatura.
 
@@ -174,18 +187,18 @@ As regras completas de backup/restauração estão em `docs/BACKUP_RESTORE.md`.
 
 A fila de mídia é separada da sincronização dos dados estruturados.
 
-Estados locais úteis por arquivo podem incluir:
+Estados operacionais ficam principalmente na fila local `media_upload_queue_v1` e na presença/ausência do blob no cache, não em uma enumeração remota que tente representar toda a máquina de estados do dispositivo.
 
-- somente local;
-- upload pendente;
+Estados úteis para a interface incluem:
+
+- aguardando upload;
 - enviando;
-- sincronizado;
-- download pendente;
-- disponível offline;
-- falha temporária;
-- remoção de cache permitida.
-
-Esses estados não precisam corresponder a uma única coluna remota; parte deles é estado operacional do cliente.
+- falha de upload;
+- sincronizado/remoto;
+- presente no cache;
+- ausente do cache;
+- receita disponível offline;
+- receita parcialmente disponível offline.
 
 A política geral de sincronização está em `docs/SYNC.md`.
 
@@ -209,18 +222,20 @@ A implementação deve cobrir, no mínimo:
 1. foto criada offline permanece visível e protegida até upload confirmado;
 2. falha de upload não apaga a única cópia local;
 3. retry de upload nunca sobrescreve objeto divergente e aceita apenas objeto já existente idêntico;
-4. foto sincronizada pode ser removida do cache sem desaparecer do produto;
-5. reabrir uma foto removida do cache baixa novamente o arquivo quando online;
-6. receita marcada como disponível offline mantém seu conteúdo previamente baixado sem rede;
-7. receita não marcada para offline continua funcional em dados estruturados mesmo se algum original não estiver local;
-8. limpar cache não executa soft delete nem exclusão remota;
-9. logout impede exposição de mídia privada da sessão anterior pela interface;
-10. usuário fora do `pair` não acessa objeto remoto por conhecer seu identificador;
-11. hard-delete de foto não dá DELETE físico ao browser e deixa falha remota retryável em fila privada;
-12. backup completo inclui originais e não substitui silenciosamente arquivos por miniaturas.
+4. cache de um par não é lido por outro par com o mesmo `mediaId`;
+5. blob legado só é migrado por job pendente do par correto;
+6. receita marcada para offline baixa galeria + fotos de histórico conhecidas;
+7. nova mídia sincronizada para receita marcada é reconciliada automaticamente;
+8. reconexão tenta completar conjunto offline parcial;
+9. desativar garantia offline não exclui mídia remota;
+10. logout preserva mutation outbox/fila de mídia pendente e não expõe cache de outro par pela interface;
+11. usuário fora do `pair` não acessa objeto remoto por conhecer seu identificador;
+12. hard-delete não dá DELETE físico ao browser e deixa falha remota retryável em fila privada;
+13. backup completo inclui originais e não substitui silenciosamente arquivos por miniaturas.
 
 ## 14. Relação com outros documentos
 
+- Mídia offline: `docs/MEDIA_OFFLINE.md`.
 - Produto: `docs/PRODUCT.md`.
 - Arquitetura: `docs/ARCHITECTURE.md`.
 - Modelo de dados: `docs/DATA_MODEL.md`.
