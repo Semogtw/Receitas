@@ -9,11 +9,12 @@ Ferramentas principais, todas gratuitas/open-source:
 - **Vitest 4** para testes unitários e de integração em TypeScript;
 - **Testing Library** para componentes React quando o teste for melhor expresso pelo comportamento observável do usuário;
 - **Playwright 1.61** para E2E e validação cross-browser;
+- **Deno 2.8.1** no gate remoto atual para testes/typecheck das Supabase Edge Functions;
 - capacidades de navegador do @Build Web Apps para QA visual/interativo quando disponíveis;
 - testes SQL/RLS e ferramentas do Supabase para invariantes do backend;
 - Codex Security para auditorias estáticas quando a implementação atingir superfícies sensíveis.
 
-Versões exatas devem ser verificadas via Context7 antes de instalação/upgrade.
+Versões exatas devem ser verificadas antes de upgrades. O runtime de release do frontend é pinado separadamente em `.node-version` e `packageManager`.
 
 ## 2. Pirâmide prática
 
@@ -33,7 +34,7 @@ Usar Vitest por integração natural com Vite/TypeScript.
 
 Cobertura padrão:
 
-- provider `v8`;
+- provider `v8` quando coverage for executada;
 - relatórios de texto e LCOV/HTML quando úteis;
 - thresholds devem ser introduzidos gradualmente e por risco, não como meta arbitrária de 100%;
 - código crítico de domínio e segurança deve ter cobertura mais forte que wrappers e UI trivial.
@@ -83,6 +84,8 @@ Componentes críticos incluem:
 - modo cozinha/timers;
 - fluxos de upload/download.
 
+O modo cozinhar deve ter, no mínimo, um teste de persistência que atravesse um **remount completo** do workspace. O teste atual avança uma etapa, persiste o draft, desmonta a UI e monta novamente, esperando retomar na etapa salva.
+
 ## 5. Playwright
 
 Usar Playwright para fluxos completos e comportamento do navegador.
@@ -95,6 +98,8 @@ Matriz mínima quando aplicável:
 - Chromium mobile quando um problema for específico de Android/Chrome.
 
 Como iOS real não pode ser completamente reproduzido sem hardware/serviços Apple, WebKit + perfil iPhone é um gate automatizado forte, mas limitações específicas de PWA instalada/iOS devem ser verificadas em dispositivo real durante uso quando possível.
+
+Os E2E que acessam o shell privado devem autenticar com uma identidade dedicada de staging; uma navegação anônima até `/recipes` não é smoke válido porque o `AuthGate` redireciona para login.
 
 ## 6. Cenários offline
 
@@ -194,6 +199,8 @@ Cobrir:
 - sanitização;
 - revisão obrigatória antes de criar receita canônica.
 
+Os testes Deno de `import-url/safe-fetch` fazem parte do gate de Edge Functions e cobrem redes privadas/reservadas, DNS misto, redirect revalidado, downgrade HTTPS→HTTP, content type e limite de resposta.
+
 ## 12. PWA e service worker
 
 Validar:
@@ -205,6 +212,8 @@ Validar:
 - cache não inclui conteúdo privado indiscriminadamente;
 - update prompt/offline-ready segue a UX escolhida;
 - deep links/rotas SPA funcionam no host estático.
+
+O source audit atual exige `runtimeCaching: []` no Workbox e atualização explícita. Isso reduz a chance de respostas privadas serem indevidamente controladas pelo service worker, mas **não substitui** o teste de uma troca real de versão no origin implantado.
 
 ## 13. Acessibilidade
 
@@ -239,23 +248,32 @@ Playwright é fallback/automação complementar, não justificativa para ignorar
 
 ## 15. CI gratuito
 
-Priorizar GitHub Actions somente para gates automáticos úteis e dentro da cota gratuita disponível ao repositório/conta.
+O checkout privado e os gates executáveis do Receitas ficam centralizados em `Semogtw/Offline-Toolchains`, conforme a regra deste projeto.
 
-Como o projeto é pessoal e o fluxo já permite testes locais/agênticos, CI não deve virar dependência cara ou motivo para bloquear desenvolvimento.
+Fronteira do runner público:
 
-Gates recomendados quando a base estiver implementada:
+- request owner-only sem secrets;
+- checkout privado com token fine-grained **Contents: Read-only**;
+- `persist-credentials: false`;
+- sem cache persistente de dependências derivado do checkout privado;
+- sem upload de source/build privado;
+- cleanup em `always()`;
+- sem credenciais de E2E, Supabase real, PowerSync ou deploy.
+
+Gates executados separadamente para maximizar diagnóstico:
 
 ```text
-lint/typecheck
-   ↓
+release-script tests
+source/security audits
+ESLint
+TypeScript
 Vitest
-   ↓
-build
-   ↓
-Playwright smoke crítico
+Deno Edge Function tests
+Deno Edge Function typecheck
+static Pages build + artifact audits
 ```
 
-Testes E2E mais pesados podem ser executados localmente ou em momentos específicos se custo/cota do CI se tornar relevante.
+E2E mais pesado e backend real permanecem gates de staging, não devem receber credenciais no runner público genérico.
 
 ## 16. Regra de conclusão
 
@@ -274,11 +292,80 @@ Ela precisa demonstrar, conforme o risco:
 
 Se um gate não puder ser executado no ambiente atual, documentar claramente a limitação e continuar com os demais gates possíveis em vez de tratar isso como barreira intransponível.
 
-## 17. Fontes técnicas verificadas
+## 17. Evidência executada em 2026-08-10
 
-Context7 consultado em 2026-08-07:
+### Runner 1 — baseline + remount cooking + Edge Functions
 
-- Vitest `/vitest-dev/vitest/v4.1.6`: configuração Vite-native, coverage V8 e thresholds;
-- Playwright `/microsoft/playwright/v1.61.0`: projetos Chromium/Firefox/WebKit, profiles de iPhone/Pixel e modo offline.
+Receitas SHA:
 
-Como versões mudam, consultar Context7 novamente antes de upgrades ou quando uma API/configuração estiver em dúvida.
+```text
+0d747fe5591efb490d5c5cba5428c139c6cf6db9
+```
+
+Offline-Toolchains workflow run:
+
+```text
+31360151562
+```
+
+Passaram:
+
+- release-script tests;
+- source security audits;
+- ESLint;
+- TypeScript;
+- Vitest;
+- Deno Edge Function tests;
+- Deno Edge Function typecheck;
+- static Pages build/artifact audits.
+
+### Runner 2 — scripts Edge oficiais + limite de headers Pages
+
+Receitas SHA:
+
+```text
+39e39640185aba28118735240219e50be96b0cc8
+```
+
+Offline-Toolchains workflow run:
+
+```text
+31360628868
+```
+
+Passaram novamente todos os steps acima, incluindo o novo teste que rejeita valores de header maiores que o limite documentado do Cloudflare Pages.
+
+### Único blocker do agregador nesses runs
+
+`pnpm-lock.yaml` ainda não estava presente no checkout. O runner executou `pnpm install --no-frozen-lockfile` **somente para descobrir falhas independentes** e depois fez o job falhar no agregador por falta de reprodutibilidade.
+
+Portanto:
+
+- os gates individuais acima estão verificados;
+- `pnpm install --frozen-lockfile` **não** está verificado;
+- o job completo **não** deve ser chamado de verde enquanto o lockfile não estiver versionado.
+
+## 18. Gates ainda externos/pendentes
+
+Exigem staging, deploy ou dispositivo apropriado:
+
+```text
+Supabase reset + SQL/RLS/pgTAP
+Edge Functions implantadas no projeto Receitas correto
+PowerSync real + isolamento/reconnect
+Playwright smoke/release autenticado
+Cloudflare Pages headers no origin real
+PWA version switch real com estado pendente
+QA visual/a11y cross-browser
+backup/restore disaster-recovery drill
+iOS PWA em dispositivo físico
+rollback exercitado
+```
+
+## 19. Fontes técnicas
+
+Documentação de bibliotecas/provedores deve ser reconsultada quando versões ou comportamento externo mudarem. Evidências específicas de release ficam em:
+
+- `docs/RELEASE_STATUS.md`;
+- `docs/RELEASE_CHECKLIST.md`;
+- `docs/RELEASE_RUNBOOK.md`.
