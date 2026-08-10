@@ -34,6 +34,9 @@ verify_jwt = true
 
 [functions.account-admin]
 verify_jwt = true
+
+[functions.permanent-delete]
+verify_jwt = true
 `
 
 test('accepts the intended closed two-person auth and private storage config', () => {
@@ -52,6 +55,13 @@ test('rejects reopened signup, weak passwords, public media and missing JWT gate
   assert(findings.some((finding) => finding.includes('minimum_password_length')))
   assert(findings.some((finding) => finding.includes('bucket must remain private')))
   assert(findings.some((finding) => finding.includes('account-admin')))
+})
+
+test('rejects a permanent-delete Edge Function without JWT verification', () => {
+  const findings = inspectSupabaseConfig(
+    SECURE_CONFIG.replace('[functions.permanent-delete]\nverify_jwt = true', '[functions.permanent-delete]\nverify_jwt = false'),
+  )
+  assert(findings.some((finding) => finding.includes('permanent-delete')))
 })
 
 test('rejects the historical underscore media bucket typo', () => {
