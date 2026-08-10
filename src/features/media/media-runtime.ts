@@ -83,6 +83,10 @@ export class MediaRuntime {
     return this.runner.drain()
   }
 
+  async hasCachedBlob(mediaId: string): Promise<boolean> {
+    return (await this.dependencies.cache.get(mediaId)) !== null
+  }
+
   async resolveBlob(mediaId: string, storagePath: string): Promise<Blob> {
     return resolveMediaBlob(mediaId, storagePath, {
       cache: this.dependencies.cache,
