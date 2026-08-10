@@ -3,6 +3,7 @@ import {
   isPublicIpAddress,
   safeFetchImportPayload,
   type HostResolver,
+  type PinnedFetchTransportFactory,
 } from './safe-fetch.ts'
 
 function assert(condition: unknown, message = 'Assertion failed'): asserts condition {
@@ -78,6 +79,55 @@ Deno.test('assertPublicImportUrl rejects DNS answers when any resolved address i
     () => assertPublicImportUrl('https://example.com/recipe', mixedResolver),
     'resolved_address_not_public',
   )
+})
+
+Deno.test('safeFetchImportPayload pins each request to a validated public IP and re-pins redirects', async () => {
+  const resolved: string[] = []
+  const resolver: HostResolver = async (hostname) => {
+    resolved.push(hostname)
+    if (hostname === 'example.com') return ['93.184.216.34']
+    if (hostname === 'cdn.example.com') return ['104.16.1.2']
+    return ['10.0.0.2']
+  }
+
+  const pins: Array<{ url: string; address: string }> = []
+  let fetchCount = 0
+  let closeCount = 0
+  const transportFactory: PinnedFetchTransportFactory = (url, address) => {
+    pins.push({ url: url.toString(), address })
+    return {
+      fetch: async () => {
+        fetchCount += 1
+        if (fetchCount === 1) {
+          return new Response(null, {
+            status: 302,
+            headers: { location: 'https://cdn.example.com/recipe' },
+          })
+        }
+        return new Response('<html><body>Receita</body></html>', {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        })
+      },
+      close: () => {
+        closeCount += 1
+      },
+    }
+  }
+
+  const result = await safeFetchImportPayload('https://example.com/start', {
+    resolver,
+    transportFactory,
+  })
+
+  assertEquals(resolved, ['example.com', 'cdn.example.com'])
+  assertEquals(pins, [
+    { url: 'https://example.com/start', address: '93.184.216.34' },
+    { url: 'https://cdn.example.com/recipe', address: '104.16.1.2' },
+  ])
+  assertEquals(fetchCount, 2)
+  assertEquals(closeCount, 2)
+  assertEquals(result.finalUrl, 'https://cdn.example.com/recipe')
 })
 
 Deno.test('safeFetchImportPayload revalidates every redirect target before fetching it', async () => {
