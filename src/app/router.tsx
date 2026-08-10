@@ -6,6 +6,7 @@ import { FinishInviteScreen } from '../features/auth/FinishInviteScreen'
 import { LoginScreen } from '../features/auth/LoginScreen'
 import { PasswordRecoveryScreen } from '../features/auth/PasswordRecoveryScreen'
 import { PendingSetupScreen } from '../features/auth/PendingSetupScreen'
+import { ReplacementCompletionScreen } from '../features/auth/ReplacementCompletionScreen'
 import { UpdatePasswordScreen } from '../features/auth/UpdatePasswordScreen'
 import { ConflictCenter } from '../features/conflicts/ConflictCenter'
 import { HistoryRoute } from './routes/HistoryRoute'
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
   { path: '/recover', Component: PasswordRecoveryScreen },
   { path: '/setup', Component: BootstrapScreen },
   { path: '/auth/finish-invite', Component: FinishInviteScreen },
+  { path: '/auth/finish-replacement', Component: ReplacementCompletionScreen },
   { path: '/auth/update-password', Component: UpdatePasswordScreen },
   { path: '/auth/pending', Component: PendingSetupScreen },
   {
