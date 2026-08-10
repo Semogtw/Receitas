@@ -51,9 +51,9 @@ test('offline-created recipe survives reload and syncs to a fresh browser contex
     // as a test failure instead of silently accumulating staging data.
     await remoteRecipe.click()
     await expect(peerPage.getByRole('heading', { name: title })).toBeVisible()
-    await peerPage.getByRole('button', { name: 'Excluir receita' }).click()
-    await expect(peerPage.getByRole('dialog')).toContainText(title)
     await peerPage.getByRole('button', { name: 'Mover para a lixeira' }).click()
+    await expect(peerPage.getByRole('dialog')).toContainText(title)
+    await peerPage.getByRole('dialog').getByRole('button', { name: 'Mover para a lixeira' }).click()
     await expect(peerPage.getByRole('heading', { name: 'Receitas' })).toBeVisible()
     await expect(peerPage.getByRole('button', { name: `Abrir ${title}` })).toHaveCount(0)
   } finally {
