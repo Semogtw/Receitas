@@ -15,6 +15,7 @@ const REQUIRED_RELEASE_E2E = [
   'tests/e2e/planner-shopping.spec.ts',
   'tests/e2e/trash-restore.spec.ts',
   'tests/e2e/conflicts.spec.ts',
+  'tests/e2e/accessibility-layout.spec.ts',
 ]
 
 function command(scripts, name) {
@@ -29,25 +30,15 @@ export function inspectReleaseCommands(packageJson) {
   const verifyRelease = command(scripts, 'verify:release')
   const deployed = command(scripts, 'test:e2e:deployed')
 
-  if (!releaseE2e.startsWith('playwright test ')) {
-    findings.push('test:e2e:release must execute Playwright directly')
-  }
-  for (const spec of REQUIRED_RELEASE_E2E) {
-    if (!releaseE2e.includes(spec)) findings.push(`test:e2e:release must include ${spec}`)
-  }
-  if (/\|\|\s*true|--pass-with-no-tests|--no-fail/i.test(releaseE2e)) {
-    findings.push('test:e2e:release must remain fail-closed')
-  }
+  if (!releaseE2e.startsWith('playwright test ')) findings.push('test:e2e:release must execute Playwright directly')
+  for (const spec of REQUIRED_RELEASE_E2E) if (!releaseE2e.includes(spec)) findings.push(`test:e2e:release must include ${spec}`)
+  if (/\|\|\s*true|--pass-with-no-tests|--no-fail/i.test(releaseE2e)) findings.push('test:e2e:release must remain fail-closed')
 
   for (const required of ['pnpm lint', 'pnpm typecheck', 'pnpm test:run', 'pnpm test:release-scripts', 'pnpm verify:source', 'pnpm verify:edge', 'pnpm build:pages', 'pnpm test:e2e:smoke']) {
     if (!verify.includes(required)) findings.push(`verify must include ${required}`)
   }
-  if (!verifyRelease.includes('pnpm verify') || !verifyRelease.includes('pnpm test:e2e:release')) {
-    findings.push('verify:release must compose verify and the authenticated release E2E suite')
-  }
-  if (!deployed.includes('tests/e2e/deployed-security.spec.ts')) {
-    findings.push('test:e2e:deployed must keep origin security/deep-link checks')
-  }
+  if (!verifyRelease.includes('pnpm verify') || !verifyRelease.includes('pnpm test:e2e:release')) findings.push('verify:release must compose verify and the authenticated release E2E suite')
+  if (!deployed.includes('tests/e2e/deployed-security.spec.ts')) findings.push('test:e2e:deployed must keep origin security/deep-link checks')
 
   return findings
 }
