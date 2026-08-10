@@ -11,6 +11,7 @@ additional_redirect_urls = [
 jwt_expiry = 3600
 enable_signup = false
 enable_anonymous_sign_ins = false
+minimum_password_length = 12
 
 [auth.email]
 enable_signup = false
@@ -49,4 +50,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.backup-restore]
+verify_jwt = true
+
+[functions.account-admin]
 verify_jwt = true
