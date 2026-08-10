@@ -23,6 +23,7 @@
     "verify:source": "node scripts/source-security-audit.mjs && node scripts/pwa-source-audit.mjs && node scripts/ui-integration-audit.mjs && node scripts/verify-zero-cost-config.mjs",
     "verify": "pnpm lint && pnpm typecheck && pnpm test:run && pnpm test:release-scripts && pnpm verify:source && pnpm verify:edge && pnpm build:pages && pnpm test:e2e:smoke",
     "verify:release": "pnpm verify && pnpm test:e2e:release",
+    "verify:deployed": "pnpm test:e2e:deployed",
     "lint": "eslint . --max-warnings=0",
     "generate:pwa-assets": "pwa-assets-generator --config pwa-assets.config.ts",
     "prepare:powersync-assets": "powersync-web copy-assets",
@@ -30,7 +31,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test tests/e2e/app-shell.spec.ts",
-    "test:e2e:release": "playwright test tests/e2e/app-shell.spec.ts tests/e2e/release-acceptance.spec.ts tests/e2e/import.spec.ts tests/e2e/backup-restore.spec.ts tests/e2e/diagnostics.spec.ts",
+    "test:e2e:release": "playwright test tests/e2e/app-shell.spec.ts tests/e2e/release-acceptance.spec.ts tests/e2e/offline-recovery.spec.ts tests/e2e/import.spec.ts tests/e2e/backup-restore.spec.ts tests/e2e/diagnostics.spec.ts",
+    "test:e2e:deployed": "playwright test tests/e2e/deployed-security.spec.ts",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset --local"
