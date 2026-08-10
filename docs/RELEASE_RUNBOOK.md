@@ -99,12 +99,14 @@ Ordem:
 
 1. configurar Auth com signup/anônimo fechados e senha mínima compatível com `supabase/config.toml`;
 2. aplicar migrations `0001` até a migration mais recente, sem pular/renumerar histórico;
-3. confirmar bucket `recipe_media` privado;
+3. confirmar bucket canônico `recipe-media` privado;
 4. confirmar bucket `restore-staging` privado;
 5. provisionar secrets server-only necessários às Edge Functions;
 6. publicar `bootstrap`, `pair-invite`, `import-url`, `backup-restore` e `account-admin` com a política JWT declarada no source;
-7. executar testes SQL/pgTAP e testes Deno contra esse staging;
+7. executar testes SQL/contratos e testes Deno contra esse staging;
 8. criar somente a identidade/par de teste dedicado ao E2E.
+
+`recipe_media` não é um alias: frontend, migration, políticas de Storage e restore devem continuar usando exatamente `recipe-media`.
 
 Nunca copie dados pessoais de produção para staging.
 
