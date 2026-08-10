@@ -100,6 +100,27 @@ export function inspectMigrationSequence(names) {
   return findings
 }
 
+export function inspectPrivatePrivilegeSql(content, filename = 'migration.sql') {
+  const findings = []
+  const normalized = content
+    .replace(/--[^\n]*/g, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\s+/g, ' ')
+
+  const unsafeRoles = '(?:public|anon|authenticated)'
+  const schemaGrant = new RegExp(`grant\\s+usage\\s+on\\s+schema\\s+private\\s+to\\s+${unsafeRoles}\\b`, 'i')
+  const functionGrant = new RegExp(`grant\\s+(?:execute|all)\\s+on\\s+function\\s+private\\.[^;]+?\\s+to\\s+${unsafeRoles}\\b`, 'i')
+
+  if (schemaGrant.test(normalized)) {
+    findings.push(`${filename}: private schema USAGE must not be granted to browser roles`)
+  }
+  if (functionGrant.test(normalized)) {
+    findings.push(`${filename}: private function EXECUTE must not be granted to browser roles`)
+  }
+
+  return findings
+}
+
 export async function auditSourceSecurity(root = process.cwd()) {
   const findings = []
   const configPath = join(root, 'supabase', 'config.toml')
@@ -112,7 +133,13 @@ export async function auditSourceSecurity(root = process.cwd()) {
   if (!migrationInfo?.isDirectory()) {
     findings.push('supabase/migrations directory is missing')
   } else {
-    findings.push(...inspectMigrationSequence(await readdir(migrationDir)))
+    const migrationNames = await readdir(migrationDir)
+    findings.push(...inspectMigrationSequence(migrationNames))
+
+    for (const name of migrationNames.filter((entry) => entry.endsWith('.sql')).sort()) {
+      const content = await readFile(join(migrationDir, name), 'utf8')
+      findings.push(...inspectPrivatePrivilegeSql(content, name))
+    }
   }
 
   return [...new Set(findings)].sort()
