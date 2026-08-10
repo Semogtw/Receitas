@@ -12,6 +12,8 @@ const REQUIRED_RELEASE_E2E = [
   'tests/e2e/recipes.spec.ts',
   'tests/e2e/cooking.spec.ts',
   'tests/e2e/media.spec.ts',
+  'tests/e2e/planner-shopping.spec.ts',
+  'tests/e2e/trash-restore.spec.ts',
 ]
 
 function command(scripts, name) {
