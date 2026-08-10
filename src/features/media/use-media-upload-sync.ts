@@ -1,8 +1,12 @@
 import { useEffect } from 'react'
 import type { MediaRuntime } from './media-runtime'
 
-export function useMediaUploadSync(runtime: MediaRuntime): void {
+type UploadRuntime = Pick<MediaRuntime, 'drainUploads'>
+
+export function useMediaUploadSync(runtime: UploadRuntime | null): void {
   useEffect(() => {
+    if (!runtime) return
+
     let active = true
 
     const drain = () => {
