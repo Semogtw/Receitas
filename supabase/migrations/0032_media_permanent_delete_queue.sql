@@ -61,7 +61,158 @@ begin
     raise exception 'active pair membership required' using errcode = '42501';
   end if;
 
-  if p_entity_type = 'recipe_photos' then
+  -- Recipe is a root aggregate. Soft delete historically marks only the recipe
+  -- row, so a permanent purge must remove its dependent graph explicitly rather
+  -- than relying on FK cascades that the canonical schema intentionally avoids.
+  if p_entity_type = 'recipes' then
+    perform 1
+      from public.recipes r
+     where r.id = p_entity_id
+       and r.pair_id = p_pair_id
+       and r.deleted_at is not null
+     for update;
+    if not found then
+      raise exception 'entity must exist in this pair and already be soft deleted' using errcode = 'P0002';
+    end if;
+
+    insert into private.media_delete_queue (storage_path, pair_id, entity_type, entity_id)
+    select rp.storage_path, p_pair_id, 'recipe_photos', rp.id
+      from public.recipe_photos rp
+     where rp.pair_id = p_pair_id
+       and rp.recipe_id = p_entity_id
+    on conflict (storage_path) do update set
+      pair_id = excluded.pair_id,
+      entity_type = excluded.entity_type,
+      entity_id = excluded.entity_id,
+      last_error = null;
+
+    insert into private.media_delete_queue (storage_path, pair_id, entity_type, entity_id)
+    select cp.storage_path, p_pair_id, 'cooking_session_photos', cp.id
+      from public.cooking_session_photos cp
+      join public.cooking_sessions cs
+        on cs.id = cp.cooking_session_id
+       and cs.pair_id = cp.pair_id
+     where cs.pair_id = p_pair_id
+       and cs.recipe_id = p_entity_id
+    on conflict (storage_path) do update set
+      pair_id = excluded.pair_id,
+      entity_type = excluded.entity_type,
+      entity_id = excluded.entity_id,
+      last_error = null;
+
+    delete from public.cooking_session_ratings csr
+     using public.cooking_sessions cs
+     where cs.id = csr.cooking_session_id
+       and cs.pair_id = csr.pair_id
+       and cs.pair_id = p_pair_id
+       and cs.recipe_id = p_entity_id;
+
+    delete from public.cooking_session_photos cp
+     using public.cooking_sessions cs
+     where cs.id = cp.cooking_session_id
+       and cs.pair_id = cp.pair_id
+       and cs.pair_id = p_pair_id
+       and cs.recipe_id = p_entity_id;
+
+    delete from public.cooking_sessions
+     where pair_id = p_pair_id
+       and recipe_id = p_entity_id;
+    delete from public.meal_plan_entries
+     where pair_id = p_pair_id
+       and recipe_id = p_entity_id;
+    delete from public.imports
+     where pair_id = p_pair_id
+       and saved_recipe_id = p_entity_id;
+    delete from public.recipe_categories
+     where pair_id = p_pair_id
+       and recipe_id = p_entity_id;
+    delete from public.recipe_photos
+     where pair_id = p_pair_id
+       and recipe_id = p_entity_id;
+    delete from public.recipe_ingredients
+     where pair_id = p_pair_id
+       and recipe_id = p_entity_id;
+    delete from public.recipe_steps
+     where pair_id = p_pair_id
+       and recipe_id = p_entity_id;
+    delete from public.recipes
+     where id = p_entity_id
+       and pair_id = p_pair_id
+       and deleted_at is not null;
+
+    get diagnostics v_deleted = row_count;
+    if v_deleted <> 1 then
+      raise exception 'recipe permanent purge failed' using errcode = 'P0001';
+    end if;
+    return null;
+  end if;
+
+  -- Cooking history is another aggregate root with ratings/photos beneath it.
+  if p_entity_type = 'cooking_sessions' then
+    perform 1
+      from public.cooking_sessions cs
+     where cs.id = p_entity_id
+       and cs.pair_id = p_pair_id
+       and cs.deleted_at is not null
+     for update;
+    if not found then
+      raise exception 'entity must exist in this pair and already be soft deleted' using errcode = 'P0002';
+    end if;
+
+    insert into private.media_delete_queue (storage_path, pair_id, entity_type, entity_id)
+    select cp.storage_path, p_pair_id, 'cooking_session_photos', cp.id
+      from public.cooking_session_photos cp
+     where cp.pair_id = p_pair_id
+       and cp.cooking_session_id = p_entity_id
+    on conflict (storage_path) do update set
+      pair_id = excluded.pair_id,
+      entity_type = excluded.entity_type,
+      entity_id = excluded.entity_id,
+      last_error = null;
+
+    delete from public.cooking_session_ratings
+     where pair_id = p_pair_id
+       and cooking_session_id = p_entity_id;
+    delete from public.cooking_session_photos
+     where pair_id = p_pair_id
+       and cooking_session_id = p_entity_id;
+    delete from public.cooking_sessions
+     where id = p_entity_id
+       and pair_id = p_pair_id
+       and deleted_at is not null;
+
+    get diagnostics v_deleted = row_count;
+    if v_deleted <> 1 then
+      raise exception 'cooking session permanent purge failed' using errcode = 'P0001';
+    end if;
+    return null;
+  end if;
+
+  -- Join/dependent rows must not make their aggregate parent impossible to purge.
+  if p_entity_type = 'categories' then
+    perform 1 from public.categories c
+     where c.id = p_entity_id and c.pair_id = p_pair_id and c.deleted_at is not null
+     for update;
+    if not found then raise exception 'entity must exist in this pair and already be soft deleted' using errcode = 'P0002'; end if;
+    delete from public.recipe_categories where pair_id = p_pair_id and category_id = p_entity_id;
+  elsif p_entity_type = 'meal_periods' then
+    perform 1 from public.meal_periods mp
+     where mp.id = p_entity_id and mp.pair_id = p_pair_id and mp.deleted_at is not null
+     for update;
+    if not found then raise exception 'entity must exist in this pair and already be soft deleted' using errcode = 'P0002'; end if;
+    update public.meal_plan_entries
+       set meal_period_id = null,
+           revision = revision + 1,
+           updated_at = now()
+     where pair_id = p_pair_id
+       and meal_period_id = p_entity_id;
+  elsif p_entity_type = 'shopping_lists' then
+    perform 1 from public.shopping_lists sl
+     where sl.id = p_entity_id and sl.pair_id = p_pair_id and sl.deleted_at is not null
+     for update;
+    if not found then raise exception 'entity must exist in this pair and already be soft deleted' using errcode = 'P0002'; end if;
+    delete from public.shopping_items where pair_id = p_pair_id and shopping_list_id = p_entity_id;
+  elsif p_entity_type = 'recipe_photos' then
     select rp.storage_path
       into v_storage_path
       from public.recipe_photos rp
