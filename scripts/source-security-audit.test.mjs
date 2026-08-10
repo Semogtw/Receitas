@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  inspectMediaBucketSource,
   inspectMigrationSequence,
   inspectPrivatePrivilegeSql,
   inspectSupabaseConfig,
@@ -16,7 +17,7 @@ minimum_password_length = 12
 [auth.email]
 enable_signup = false
 
-[storage.buckets.recipe_media]
+[storage.buckets.recipe-media]
 public = false
 
 [functions.bootstrap]
@@ -51,6 +52,29 @@ test('rejects reopened signup, weak passwords, public media and missing JWT gate
   assert(findings.some((finding) => finding.includes('minimum_password_length')))
   assert(findings.some((finding) => finding.includes('bucket must remain private')))
   assert(findings.some((finding) => finding.includes('account-admin')))
+})
+
+test('rejects the historical underscore media bucket typo', () => {
+  const findings = inspectSupabaseConfig(
+    SECURE_CONFIG.replace('[storage.buckets.recipe-media]', '[storage.buckets.recipe_media]'),
+  )
+  assert(findings.some((finding) => finding.includes('recipe-media bucket')))
+})
+
+test('requires the canonical media bucket across frontend, restore and migration source', () => {
+  const secureSources = {
+    mediaConfig: "export const MEDIA_STORAGE_BUCKET = 'recipe-media'",
+    restoreCommit: "const RECIPE_MEDIA_BUCKET = 'recipe-media'",
+    storageMigration: "values ('recipe-media'); create policy p on storage.objects using (bucket_id = 'recipe-media');",
+  }
+  assert.deepEqual(inspectMediaBucketSource(secureSources), [])
+
+  const drifted = inspectMediaBucketSource({
+    ...secureSources,
+    restoreCommit: "const RECIPE_MEDIA_BUCKET = 'recipe_media'",
+  })
+  assert(drifted.some((finding) => finding.includes('restore media bucket')))
+  assert(drifted.some((finding) => finding.includes('underscore recipe_media')))
 })
 
 test('requires the bootstrap JWT exception to stay explicit rather than silently drifting', () => {
