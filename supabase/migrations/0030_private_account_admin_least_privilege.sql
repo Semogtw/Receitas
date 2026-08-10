@@ -1,14 +1,33 @@
--- Defense in depth for account-administration helpers. The private schema was
--- already closed in 0001, but function EXECUTE is granted to PUBLIC by default
--- in PostgreSQL. Keep both barriers explicit so a future schema-USAGE change
+-- Defense in depth for every private helper. The private schema was already
+-- closed in 0001, but PostgreSQL grants EXECUTE on newly created functions to
+-- PUBLIC by default. Keep both barriers explicit so a future schema-USAGE change
 -- cannot accidentally expose SECURITY DEFINER helpers.
 revoke all on schema private from public, anon, authenticated;
 
-revoke all on function private.touch_account_admin_updated_at() from public, anon, authenticated;
-revoke all on function private.assert_account_admin_actor(uuid, uuid) from public, anon, authenticated;
-revoke all on function private.assert_account_admin_safety(uuid, uuid, uuid) from public, anon, authenticated;
-revoke all on function private.account_admin_recoverable_target(uuid, uuid) from public, anon, authenticated;
-revoke all on function private.enforce_pair_member_capacity() from public, anon, authenticated;
+-- Make future private functions created by the migration owner non-executable
+-- by PUBLIC unless a later migration deliberately grants a narrower role.
+alter default privileges in schema private
+  revoke execute on functions from public;
 
--- Public RPCs remain the only server entry points and continue to be executable
--- exclusively by service_role as established in 0026-0029.
+-- Remove the default PUBLIC/direct browser-role EXECUTE privilege from every
+-- private function that already exists at this point in the migration chain.
+do $$
+declare
+  fn record;
+begin
+  for fn in
+    select p.oid::regprocedure as signature
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'private'
+  loop
+    execute format(
+      'revoke all on function %s from public, anon, authenticated',
+      fn.signature
+    );
+  end loop;
+end;
+$$;
+
+-- Public RPCs remain the only intentional server entry points and continue to
+-- receive their explicit service_role grants in the migrations that define them.
