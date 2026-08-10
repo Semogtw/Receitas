@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useModalDialog } from '../../../components/accessibility/useModalDialog'
 import { parseAmount } from '../../recipes/domain/amount'
 import type { RecipeSummary } from '../../recipes/data/recipe-repository'
 import type { MealPeriod, MealPlanEntry, MealPlanEntryInput } from '../domain/types'
@@ -19,6 +20,7 @@ function servingsText(entry: MealPlanEntry | null | undefined): string {
 }
 
 export function MealPlanEditor({ date, recipes, periods, initial, onSave, onCancel }: MealPlanEditorProps) {
+  const dialogRef = useModalDialog<HTMLDivElement>(onCancel)
   const defaultRecipeId = initial?.recipeId ?? recipes[0]?.id ?? ''
   const defaultPeriodId = initial?.mealPeriodId ?? periods[0]?.id ?? ''
   const [recipeId, setRecipeId] = useState(defaultRecipeId)
@@ -80,7 +82,7 @@ export function MealPlanEditor({ date, recipes, periods, initial, onSave, onCanc
   }
 
   return (
-    <div className="planner-editor" role="dialog" aria-modal="true" aria-labelledby="planner-editor-title">
+    <div ref={dialogRef} tabIndex={-1} className="planner-editor" role="dialog" aria-modal="true" aria-labelledby="planner-editor-title">
       <form className="planner-editor__panel" onSubmit={handleSubmit}>
         <header>
           <h2 id="planner-editor-title">{initial ? `Editar ${recipeTitle}` : 'Planejar refeição'}</h2>
