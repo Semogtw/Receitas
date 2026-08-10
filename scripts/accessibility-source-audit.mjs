@@ -73,6 +73,9 @@ export function inspectAccessibilitySources({ tokens, themes, base, dialogs }) {
     if (!source.includes('aria-labelledby=') && !source.includes('aria-label=')) {
       findings.push(`${name} dialog must remain programmatically labelled`)
     }
+    if (!source.includes('useModalDialog<') || !source.includes('tabIndex={-1}')) {
+      findings.push(`${name} must keep keyboard focus entry, Escape close and focus restoration through useModalDialog`)
+    }
   }
 
   return findings
