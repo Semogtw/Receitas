@@ -1,8 +1,17 @@
 export type HostResolver = (hostname: string) => Promise<string[]>
 
+export interface PinnedFetchTransport {
+  fetch(input: URL, init: RequestInit): Promise<Response>
+  close(): void
+}
+
+export type PinnedFetchTransportFactory = (url: URL, address: string) => PinnedFetchTransport
+
 export interface SafeFetchOptions {
   resolver?: HostResolver
+  /** Test seam. Production callers should rely on the pinned Deno transport. */
   fetchImpl?: typeof fetch
+  transportFactory?: PinnedFetchTransportFactory
   timeoutMs?: number
   maxBytes?: number
   maxRedirects?: number
@@ -12,6 +21,11 @@ export interface SafeImportPayload {
   body: string
   contentType: 'text/html' | 'application/xhtml+xml' | 'application/ld+json'
   finalUrl: string
+}
+
+interface ResolvedImportTarget {
+  url: URL
+  addresses: string[]
 }
 
 export class ImportFetchError extends Error {
@@ -189,10 +203,10 @@ export const resolveHostWithDeno: HostResolver = async (hostname) => {
   return addresses
 }
 
-export async function assertPublicImportUrl(
+async function resolvePublicImportTarget(
   rawUrl: string,
-  resolver: HostResolver = resolveHostWithDeno,
-): Promise<URL> {
+  resolver: HostResolver,
+): Promise<ResolvedImportTarget> {
   let url: URL
   try {
     url = new URL(rawUrl)
@@ -211,7 +225,7 @@ export async function assertPublicImportUrl(
 
   if (isLiteralIp(hostname)) {
     if (!isPublicIpAddress(hostname)) throw new ImportFetchError('resolved_address_not_public')
-    return url
+    return { url, addresses: [hostname] }
   }
 
   const addresses = await resolver(hostname)
@@ -219,7 +233,34 @@ export async function assertPublicImportUrl(
   if (addresses.some((address) => !isPublicIpAddress(address))) {
     throw new ImportFetchError('resolved_address_not_public')
   }
-  return url
+  return { url, addresses }
+}
+
+export async function assertPublicImportUrl(
+  rawUrl: string,
+  resolver: HostResolver = resolveHostWithDeno,
+): Promise<URL> {
+  return (await resolvePublicImportTarget(rawUrl, resolver)).url
+}
+
+/**
+ * Pins the TCP connection to an address that was already checked as public.
+ * The fetch URL remains the original hostname, so HTTP Host and TLS certificate
+ * validation continue to use the requested origin instead of the raw IP.
+ */
+export const createPinnedDenoTransport: PinnedFetchTransportFactory = (url, address) => {
+  const client = Deno.createHttpClient({
+    proxy: {
+      transport: 'tcp',
+      hostname: address,
+      port: url.protocol === 'https:' ? 443 : 80,
+    },
+  })
+
+  return {
+    fetch: (input, init) => fetch(input, { ...init, client }),
+    close: () => client.close(),
+  }
 }
 
 async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
@@ -274,12 +315,19 @@ function requestSignal(timeoutMs: number): AbortSignal {
   return AbortSignal.timeout(timeoutMs)
 }
 
+function injectedFetchTransport(fetchImpl: typeof fetch): PinnedFetchTransport {
+  return {
+    fetch: (input, init) => fetchImpl(input, init),
+    close: () => undefined,
+  }
+}
+
 export async function safeFetchImportPayload(
   rawUrl: string,
   options: SafeFetchOptions = {},
 ): Promise<SafeImportPayload> {
   const resolver = options.resolver ?? resolveHostWithDeno
-  const fetchImpl = options.fetchImpl ?? fetch
+  const transportFactory = options.transportFactory ?? createPinnedDenoTransport
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES
   const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS
@@ -291,53 +339,65 @@ export async function safeFetchImportPayload(
     throw new ImportFetchError('invalid_max_redirects')
   }
 
-  let current = await assertPublicImportUrl(rawUrl, resolver)
+  let current = await resolvePublicImportTarget(rawUrl, resolver)
 
   for (let redirects = 0; redirects <= maxRedirects; redirects += 1) {
-    let response: Response
+    // Every resolved address must be public; pinning to the first validated A/AAAA
+    // answer prevents a second DNS lookup inside fetch from rebinding to localhost,
+    // metadata services or another private range.
+    const transport = options.fetchImpl
+      ? injectedFetchTransport(options.fetchImpl)
+      : transportFactory(current.url, current.addresses[0]!)
+
     try {
-      response = await fetchImpl(current, {
-        method: 'GET',
-        redirect: 'manual',
-        signal: requestSignal(timeoutMs),
-        headers: {
-          accept: 'text/html,application/xhtml+xml,application/ld+json;q=0.9',
-        },
-        cache: 'no-store',
-        referrerPolicy: 'no-referrer',
-      })
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'TimeoutError') {
-        throw new ImportFetchError('fetch_timeout')
-      }
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        throw new ImportFetchError('fetch_timeout')
-      }
-      throw new ImportFetchError('fetch_failed')
-    }
-
-    if (REDIRECT_STATUSES.has(response.status)) {
-      if (redirects >= maxRedirects) throw new ImportFetchError('too_many_redirects')
-      const location = response.headers.get('location')
-      if (!location) throw new ImportFetchError('redirect_without_location')
-
-      let next: URL
+      let response: Response
       try {
-        next = new URL(location, current)
-      } catch {
-        throw new ImportFetchError('invalid_redirect_url')
+        response = await transport.fetch(current.url, {
+          method: 'GET',
+          redirect: 'manual',
+          signal: requestSignal(timeoutMs),
+          headers: {
+            accept: 'text/html,application/xhtml+xml,application/ld+json;q=0.9',
+          },
+          cache: 'no-store',
+          referrerPolicy: 'no-referrer',
+        })
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'TimeoutError') {
+          throw new ImportFetchError('fetch_timeout')
+        }
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          throw new ImportFetchError('fetch_timeout')
+        }
+        if (error instanceof ImportFetchError) throw error
+        throw new ImportFetchError('fetch_failed')
       }
-      if (current.protocol === 'https:' && next.protocol === 'http:') {
-        throw new ImportFetchError('https_downgrade_not_allowed')
-      }
-      current = await assertPublicImportUrl(next.toString(), resolver)
-      continue
-    }
 
-    if (!response.ok) throw new ImportFetchError(`upstream_http_${response.status}`)
-    const contentType = normalizedContentType(response)
-    const body = await readBoundedText(response, maxBytes)
-    return { body, contentType, finalUrl: current.toString() }
+      if (REDIRECT_STATUSES.has(response.status)) {
+        if (redirects >= maxRedirects) throw new ImportFetchError('too_many_redirects')
+        const location = response.headers.get('location')
+        if (!location) throw new ImportFetchError('redirect_without_location')
+
+        let next: URL
+        try {
+          next = new URL(location, current.url)
+        } catch {
+          throw new ImportFetchError('invalid_redirect_url')
+        }
+        if (current.url.protocol === 'https:' && next.protocol === 'http:') {
+          throw new ImportFetchError('https_downgrade_not_allowed')
+        }
+        current = await resolvePublicImportTarget(next.toString(), resolver)
+        continue
+      }
+
+      if (!response.ok) throw new ImportFetchError(`upstream_http_${response.status}`)
+      const contentType = normalizedContentType(response)
+      const body = await readBoundedText(response, maxBytes)
+      return { body, contentType, finalUrl: current.url.toString() }
+    } finally {
+      transport.close()
+    }
   }
 
   throw new ImportFetchError('too_many_redirects')
