@@ -93,8 +93,16 @@ export class MediaRuntime {
       throw new Error('Media upload job does not belong to the active pair')
     }
 
-    await this.dependencies.cache.deleteForUpload(job)
+    // Removing the durable job is the authoritative cancellation boundary.
+    // Cache cleanup follows best-effort: a leftover pair-scoped blob is safer
+    // than a surviving job whose only recoverable binary was already deleted.
     await this.dependencies.queue.remove(job.id)
+    try {
+      await this.dependencies.cache.deleteForUpload(job)
+    } catch {
+      // Orphaned cache data is inaccessible without metadata/job scope and can
+      // be reclaimed later by browser eviction or explicit cache maintenance.
+    }
   }
 
   async drainUploads(): Promise<MediaUploadDrainResult> {
