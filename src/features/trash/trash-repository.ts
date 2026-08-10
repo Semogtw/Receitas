@@ -59,15 +59,14 @@ function labelForRow(entityType: SyncableEntityType, row: TrashRow): string {
 async function defaultPermanentDelete(
   entityType: SyncableEntityType,
   entityId: string,
-  pairId: string,
+  _pairId: string,
 ): Promise<void> {
   const supabase = getSupabaseClient()
-  const { error } = await supabase.rpc('permanently_delete_entity', {
-    p_entity_type: entityType,
-    p_entity_id: entityId,
-    p_pair_id: pairId,
+  const { data, error } = await supabase.functions.invoke('permanent-delete', {
+    body: { entityType, entityId },
   })
   if (error) throw error
+  if (!data || data.ok !== true) throw new Error('Permanent deletion was not confirmed by the server')
 }
 
 export class TrashRepository {
