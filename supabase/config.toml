@@ -30,7 +30,7 @@ token_refresh = 150
 enabled = true
 file_size_limit = "20MiB"
 
-[storage.buckets.recipe_media]
+[storage.buckets.recipe-media]
 public = false
 file_size_limit = "20MiB"
 allowed_mime_types = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]
