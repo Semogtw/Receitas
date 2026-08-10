@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const JWT_REQUIRED_FUNCTIONS = ['pair-invite', 'import-url', 'backup-restore', 'account-admin']
+export const CANONICAL_MEDIA_BUCKET = 'recipe-media'
 
 function parseRelevantToml(content) {
   const sections = new Map()
@@ -57,8 +58,8 @@ export function inspectSupabaseConfig(content) {
     findings.push('auth.minimum_password_length must be at least 12')
   }
 
-  if (booleanValue(sections, 'storage.buckets.recipe_media', 'public') !== false) {
-    findings.push('recipe_media bucket must remain private')
+  if (booleanValue(sections, `storage.buckets.${CANONICAL_MEDIA_BUCKET}`, 'public') !== false) {
+    findings.push(`${CANONICAL_MEDIA_BUCKET} bucket must remain private and use the canonical bucket id`)
   }
 
   if (booleanValue(sections, 'functions.bootstrap', 'verify_jwt') !== false) {
@@ -121,6 +122,26 @@ export function inspectPrivatePrivilegeSql(content, filename = 'migration.sql') 
   return findings
 }
 
+export function inspectMediaBucketSource({ mediaConfig, restoreCommit, storageMigration }) {
+  const findings = []
+  const quotedCanonical = `'${CANONICAL_MEDIA_BUCKET}'`
+
+  if (!mediaConfig.includes(`MEDIA_STORAGE_BUCKET = ${quotedCanonical}`)) {
+    findings.push(`frontend media bucket must be ${CANONICAL_MEDIA_BUCKET}`)
+  }
+  if (!restoreCommit.includes(`RECIPE_MEDIA_BUCKET = ${quotedCanonical}`)) {
+    findings.push(`restore media bucket must be ${CANONICAL_MEDIA_BUCKET}`)
+  }
+  if (!storageMigration.includes(quotedCanonical) || !storageMigration.includes(`bucket_id = ${quotedCanonical}`)) {
+    findings.push(`storage migration must create and protect ${CANONICAL_MEDIA_BUCKET}`)
+  }
+  if (/['"]recipe_media['"]/.test(`${mediaConfig}\n${restoreCommit}\n${storageMigration}`)) {
+    findings.push('underscore recipe_media bucket id is forbidden; canonical id is recipe-media')
+  }
+
+  return findings
+}
+
 export async function auditSourceSecurity(root = process.cwd()) {
   const findings = []
   const configPath = join(root, 'supabase', 'config.toml')
@@ -141,6 +162,13 @@ export async function auditSourceSecurity(root = process.cwd()) {
       findings.push(...inspectPrivatePrivilegeSql(content, name))
     }
   }
+
+  const [mediaConfig, restoreCommit, storageMigration] = await Promise.all([
+    readFile(join(root, 'src', 'features', 'media', 'media-config.ts'), 'utf8').catch(() => ''),
+    readFile(join(root, 'supabase', 'functions', 'backup-restore', 'commit.ts'), 'utf8').catch(() => ''),
+    readFile(join(root, 'supabase', 'migrations', '0015_media_storage.sql'), 'utf8').catch(() => ''),
+  ])
+  findings.push(...inspectMediaBucketSource({ mediaConfig, restoreCommit, storageMigration }))
 
   return [...new Set(findings)].sort()
 }
