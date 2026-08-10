@@ -1,4 +1,4 @@
-import { Check, Plus, Star } from 'lucide-react'
+import { Check, Plus, Star, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import type { ShoppingList } from '../domain/types'
 
@@ -8,9 +8,10 @@ interface ShoppingListsProps {
   onSelect: (id: string) => void
   onCreate: (name: string) => Promise<void> | void
   onSetDefault: (id: string) => Promise<void> | void
+  onDelete: (id: string) => Promise<void> | void
 }
 
-export function ShoppingLists({ lists, activeListId, onSelect, onCreate, onSetDefault }: ShoppingListsProps) {
+export function ShoppingLists({ lists, activeListId, onSelect, onCreate, onSetDefault, onDelete }: ShoppingListsProps) {
   const [newName, setNewName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -37,6 +38,18 @@ export function ShoppingLists({ lists, activeListId, onSelect, onCreate, onSetDe
       await onSetDefault(id)
     } catch {
       setError('Não foi possível alterar a lista padrão.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function moveToTrash(id: string) {
+    setBusy(true)
+    setError(null)
+    try {
+      await onDelete(id)
+    } catch {
+      setError('Não foi possível mover a lista para a lixeira.')
     } finally {
       setBusy(false)
     }
@@ -73,6 +86,16 @@ export function ShoppingLists({ lists, activeListId, onSelect, onCreate, onSetDe
                 ) : (
                   <span className="shopping-list-tab__current" aria-label="Lista padrão"><Check aria-hidden="true" /></span>
                 )}
+                <button
+                  type="button"
+                  className="shopping-list-tab__delete icon-button"
+                  disabled={busy}
+                  onClick={() => void moveToTrash(list.id)}
+                  aria-label={`Mover ${list.name} para a lixeira`}
+                  title="Mover para a lixeira"
+                >
+                  <Trash2 aria-hidden="true" />
+                </button>
               </div>
             )
           })}
