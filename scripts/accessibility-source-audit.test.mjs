@@ -25,7 +25,12 @@ const BASE = `
 :focus-visible { outline: 0.1875rem solid currentColor; }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms; } }
 `
-const DIALOG = '<div role="dialog" aria-modal="true" aria-labelledby="title"><h2 id="title">Dialog</h2></div>'
+const DIALOG = `
+const dialogRef = useModalDialog<HTMLDivElement>(onClose)
+<div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="title">
+  <h2 id="title">Dialog</h2>
+</div>
+`
 
 function safeInput() {
   return {
@@ -63,11 +68,12 @@ test('rejects insufficient text contrast in either theme', () => {
   assert(findings.some((finding) => finding.includes('light muted/background')))
 })
 
-test('requires modal dialogs to remain labelled', () => {
+test('requires modal dialogs to remain labelled and focus-managed', () => {
   const findings = inspectAccessibilitySources({
     ...safeInput(),
     dialogs: { Broken: '<div role="dialog">Unlabelled</div>' },
   })
   assert(findings.some((finding) => finding.includes('aria-modal=true')))
   assert(findings.some((finding) => finding.includes('programmatically labelled')))
+  assert(findings.some((finding) => finding.includes('useModalDialog')))
 })
