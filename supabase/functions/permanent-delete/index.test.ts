@@ -82,6 +82,50 @@ Deno.test('handler derives pair server-side and ignores a malicious browser pair
   assert(!('pairId' in deleteCall.args), 'browser pairId must never reach the server RPC')
 })
 
+Deno.test('cleanup action retries the private queue without exposing paths', async () => {
+  let queueRead = 0
+  const pairChain = {
+    select() { return this },
+    eq() { return this },
+    is() { return this },
+    not() { return this },
+    async limit() {
+      return { data: [{ pair_id: '20000000-0000-4000-8000-000000000002' }], error: null }
+    },
+  }
+  const client = {
+    from: () => pairChain,
+    rpc: async (name: string) => {
+      if (name === 'read_media_delete_queue_server') {
+        queueRead += 1
+        return queueRead === 1
+          ? { data: [{ storage_path: 'pairs/pair-a/recipes/recipe-a/photo.webp' }], error: null }
+          : { data: [], error: null }
+      }
+      if (name === 'mark_media_delete_complete_server') return { data: null, error: null }
+      throw new Error(`unexpected rpc ${name}`)
+    },
+    storage: {
+      from: () => ({ remove: async () => ({ data: [], error: null }) }),
+    },
+  }
+
+  const handler = createPermanentDeleteHandler({
+    getClient: () => client as never,
+    getUserId: async () => '10000000-0000-4000-8000-000000000001',
+  })
+  const response = await handler(new Request('https://edge.invalid/permanent-delete', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'cleanup', pairId: 'ffffffff-ffff-4fff-8fff-ffffffffffff' }),
+  }))
+
+  assertEquals(response.status, 200)
+  const body = await response.json()
+  assertEquals(body, { ok: true, cleanupPending: false })
+  assert(!JSON.stringify(body).includes('storage_path'), 'private cleanup paths must not be returned')
+})
+
 Deno.test('cleanup queue keeps a failed Storage removal retryable', async () => {
   const calls: string[] = []
   const client = {
