@@ -8,6 +8,7 @@ import { resolveMediaBlob } from './data/resolve-media-blob'
 interface MediaRuntimeCache {
   put(mediaId: string, blob: Blob): Promise<void>
   get(mediaId: string): Promise<Blob | null>
+  getForUpload(job: MediaUploadJob): Promise<Blob | null>
   delete(mediaId: string): Promise<boolean>
 }
 
@@ -46,6 +47,7 @@ export class MediaRuntime {
   private readonly runner: MediaUploadRunner
 
   constructor(private readonly dependencies: {
+    pairId: string
     cache: MediaRuntimeCache
     queue: MediaRuntimeQueue
     storage: MediaRuntimeStorage
@@ -62,6 +64,9 @@ export class MediaRuntime {
   }
 
   async queuePhoto(input: QueuePhotoInput): Promise<MediaUploadJob> {
+    if (input.pairId !== this.dependencies.pairId) {
+      throw new Error('Media upload input does not belong to the active pair')
+    }
     return enqueuePreparedPhoto({
       ...input,
       prepare: this.dependencies.prepare,
@@ -72,6 +77,10 @@ export class MediaRuntime {
 
   async listUploads(): Promise<MediaUploadJob[]> {
     return this.dependencies.queue.load()
+  }
+
+  async getPendingBlob(job: MediaUploadJob): Promise<Blob | null> {
+    return this.dependencies.cache.getForUpload(job)
   }
 
   async drainUploads(): Promise<MediaUploadDrainResult> {
