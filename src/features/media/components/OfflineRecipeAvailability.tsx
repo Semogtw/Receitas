@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PowerSyncDatabase } from '@powersync/web'
 import { OfflineRecipeMediaManager, type OfflineRecipeMediaStatus } from '../data/offline-recipe-media'
 import type { MediaRuntime } from '../media-runtime'
@@ -36,31 +36,59 @@ export function OfflineRecipeAvailability({ database, pairId, recipeId, runtime 
   const [status, setStatus] = useState<OfflineRecipeMediaStatus>(EMPTY_STATUS)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const reconcilingRef = useRef(false)
+  const reconcileAgainRef = useRef(false)
+  const manualOperationRef = useRef(false)
 
-  const refresh = useCallback(async () => {
+  const reconcile = useCallback(async () => {
+    if (manualOperationRef.current) {
+      reconcileAgainRef.current = true
+      return
+    }
+    if (reconcilingRef.current) {
+      reconcileAgainRef.current = true
+      return
+    }
+
+    reconcilingRef.current = true
     try {
-      setStatus(await manager.inspect(recipeId))
+      do {
+        reconcileAgainRef.current = false
+        const result = navigator.onLine
+          ? await manager.reconcile(recipeId)
+          : await manager.inspect(recipeId)
+        setStatus(result)
+        if ('failed' in result && result.failed > 0) {
+          setError('Parte das fotos ainda não pôde ser baixada. O app tentará novamente quando a conexão ou os dados mudarem.')
+        }
+      } while (reconcileAgainRef.current && !manualOperationRef.current)
     } catch {
       setError('Não foi possível verificar a disponibilidade offline desta receita.')
+    } finally {
+      reconcilingRef.current = false
     }
   }, [manager, recipeId])
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    void reconcile()
+  }, [reconcile])
 
   useEffect(() => {
     const listener = database.registerListener({
-      crudUpdate: () => void refresh(),
+      crudUpdate: () => void reconcile(),
     } as Parameters<PowerSyncDatabase['registerListener']>[0]) as unknown
+    const onOnline = () => void reconcile()
+    window.addEventListener('online', onOnline)
     return () => {
+      window.removeEventListener('online', onOnline)
       if (typeof listener === 'function') listener()
     }
-  }, [database, refresh])
+  }, [database, reconcile])
 
   async function enable(): Promise<void> {
     setBusy(true)
     setError(null)
+    manualOperationRef.current = true
     try {
       const result = await manager.prepare(recipeId)
       setStatus(result)
@@ -69,22 +97,26 @@ export function OfflineRecipeAvailability({ database, pairId, recipeId, runtime 
       }
     } catch {
       setError('Não foi possível preparar esta receita para uso offline.')
-      await refresh()
     } finally {
+      manualOperationRef.current = false
       setBusy(false)
+      if (reconcileAgainRef.current) void reconcile()
     }
   }
 
   async function disable(): Promise<void> {
     setBusy(true)
     setError(null)
+    manualOperationRef.current = true
     try {
       await manager.setEnabled(recipeId, false)
-      await refresh()
+      setStatus(await manager.inspect(recipeId))
     } catch {
       setError('Não foi possível alterar a preferência offline neste dispositivo.')
     } finally {
+      manualOperationRef.current = false
       setBusy(false)
+      if (reconcileAgainRef.current) void reconcile()
     }
   }
 
