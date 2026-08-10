@@ -20,6 +20,7 @@ test('photo added offline survives reload and reaches a fresh browser context af
   await page.getByLabel('Título').fill(title)
   await page.getByRole('button', { name: 'Salvar receita' }).click()
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Como ficou' })).toBeVisible()
 
   await page.evaluate(async () => {
     if (!('serviceWorker' in navigator)) throw new Error('Service worker indisponível para o gate de mídia offline')
@@ -28,16 +29,16 @@ test('photo added offline survives reload and reaches a fresh browser context af
 
   await context.setOffline(true)
   try {
-    await page.getByLabel('Foto').setInputFiles({
+    await page.getByLabel('Arquivo da foto').setInputFiles({
       name: 'fixture.png',
       mimeType: 'image/png',
       buffer: ONE_PIXEL_PNG,
     })
-    const captionInput = page.getByLabel('Legenda (opcional)')
-    if (await captionInput.count()) await captionInput.fill(caption)
+    await page.getByLabel('Legenda da foto').fill(caption)
     await page.getByRole('button', { name: 'Adicionar foto' }).click()
 
     await expect(page.getByText(caption)).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText('Aguardando upload')).toBeVisible()
     await page.reload({ waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { name: 'Receitas' })).toBeVisible()
     await page.getByRole('button', { name: `Abrir ${title}` }).click()
@@ -46,9 +47,14 @@ test('photo added offline survives reload and reaches a fresh browser context af
     await context.setOffline(false)
   }
 
-  // Wait for the normal media upload runner + metadata mutation/sync. A fresh
-  // context cannot see the first browser's Cache Storage, so seeing the caption
-  // there proves that the remote object/metadata path completed.
+  // The route-level reconnect coordinator drains the durable queue after the
+  // browser comes online. Waiting for the pending marker to disappear proves
+  // that the local-only upload job advanced before the fresh-context check.
+  await expect(page.getByText('Aguardando upload')).toHaveCount(0, { timeout: 60_000 })
+
+  // A fresh context cannot see the first browser's Cache Storage. Seeing the
+  // caption and image there therefore proves that remote metadata + Storage
+  // completed through the normal authenticated flow.
   const origin = new URL(page.url()).origin
   const peerContext = await browser.newContext({ baseURL: origin })
   const peerPage = await peerContext.newPage()
