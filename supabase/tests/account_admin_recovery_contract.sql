@@ -19,6 +19,28 @@ begin
     raise exception 'account_admin_recoverable_target is missing';
   end if;
 
+  if has_schema_privilege('authenticated', 'private', 'USAGE') then
+    raise exception 'authenticated must not have USAGE on private schema';
+  end if;
+  if has_schema_privilege('anon', 'private', 'USAGE') then
+    raise exception 'anon must not have USAGE on private schema';
+  end if;
+
+  if has_function_privilege(
+    'authenticated',
+    'private.account_admin_recoverable_target(uuid,uuid)',
+    'EXECUTE'
+  ) then
+    raise exception 'authenticated must not execute private account-admin recovery helper';
+  end if;
+  if has_function_privilege(
+    'anon',
+    'private.assert_account_admin_safety(uuid,uuid,uuid)',
+    'EXECUTE'
+  ) then
+    raise exception 'anon must not execute private account-admin safety helper';
+  end if;
+
   if has_function_privilege(
     'authenticated',
     'public.account_admin_remove_other(uuid,uuid,uuid,uuid)',
