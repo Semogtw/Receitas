@@ -95,11 +95,11 @@ No SQL Editor, verifique somente metadados dos buckets:
 ```sql
 select id, public
 from storage.buckets
-where id in ('recipe_media', 'restore-staging')
+where id in ('recipe-media', 'restore-staging')
 order by id;
 ```
 
-Buckets presentes devem continuar privados (`public = false`).
+Buckets presentes devem continuar privados (`public = false`). O identificador canônico da mídia do produto é `recipe-media` com hífen; `recipe_media` não é um alias válido.
 
 Não faça download em massa de mídia de produção para um runner público.
 
