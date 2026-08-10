@@ -207,6 +207,43 @@ export class PlannerRepository {
     }
   }
 
+  async softDeleteMealPeriod(id: string): Promise<void> {
+    const period = await this.activeRow('meal_periods', id)
+    const entries = await this.database.getAll<DatabaseRow>(
+      `SELECT * FROM meal_plan_entries
+       WHERE pair_id = ? AND meal_period_id = ? AND deleted_at IS NULL
+       ORDER BY created_at ASC, id ASC`,
+      [this.scope.pairId, id],
+    )
+    const now = new Date().toISOString()
+
+    for (const entry of entries) {
+      const current = payloadFromRow(entry)
+      const base = await resolveMutationBase(this.database, 'meal_plan_entries', entry.id, current)
+      await this.writeMutation(this.database, createMutationEnvelope({
+        pairId: this.scope.pairId,
+        actorUserId: this.scope.actorUserId,
+        entityType: 'meal_plan_entries',
+        entityId: entry.id,
+        operation: 'update',
+        ...base,
+        next: { ...current, meal_period_id: null, updated_at: now },
+      }))
+    }
+
+    const current = payloadFromRow(period)
+    const base = await resolveMutationBase(this.database, 'meal_periods', id, current)
+    await this.writeMutation(this.database, createMutationEnvelope({
+      pairId: this.scope.pairId,
+      actorUserId: this.scope.actorUserId,
+      entityType: 'meal_periods',
+      entityId: id,
+      operation: 'soft_delete',
+      ...base,
+      next: { ...current, deleted_at: now, updated_at: now },
+    }))
+  }
+
   async listEntries(range: MealPlanRange): Promise<MealPlanEntry[]> {
     const start = dateOnly(range.start, 'Planner range start')
     const end = dateOnly(range.end, 'Planner range end')
