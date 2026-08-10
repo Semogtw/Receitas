@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const PUBLIC_ENDPOINT_KEYS = ['VITE_SUPABASE_URL', 'VITE_POWERSYNC_URL']
+export const CLOUDFLARE_HEADER_VALUE_LIMIT = 2000
 
 function exactHttpsOrigin(rawValue, name) {
   if (!rawValue) throw new Error(`${name} is required to generate release headers`)
@@ -62,6 +63,19 @@ export async function resolveReleasePublicEnv({ root = process.cwd(), env = proc
   return resolved
 }
 
+export function assertCloudflareHeaderLimits(content, limit = CLOUDFLARE_HEADER_VALUE_LIMIT) {
+  for (const rawLine of content.split(/\r?\n/)) {
+    if (!rawLine.startsWith('  ')) continue
+    const separator = rawLine.indexOf(':')
+    if (separator < 0) continue
+    const name = rawLine.slice(2, separator).trim()
+    const value = rawLine.slice(separator + 1).trimStart()
+    if (value.length > limit) {
+      throw new Error(`${name} exceeds Cloudflare Pages header value limit (${value.length} > ${limit})`)
+    }
+  }
+}
+
 export function buildPagesHeaders({ supabaseUrl, powersyncUrl, releaseEnv = 'preview' }) {
   const supabaseOrigin = exactHttpsOrigin(supabaseUrl, 'VITE_SUPABASE_URL')
   const powersyncOrigin = exactHttpsOrigin(powersyncUrl, 'VITE_POWERSYNC_URL')
@@ -96,7 +110,9 @@ export function buildPagesHeaders({ supabaseUrl, powersyncUrl, releaseEnv = 'pre
     lines.push('  Strict-Transport-Security: max-age=31536000; includeSubDomains')
   }
 
-  return `${lines.join('\n')}\n`
+  const content = `${lines.join('\n')}\n`
+  assertCloudflareHeaderLimits(content)
+  return content
 }
 
 export async function generatePagesHeaders({
