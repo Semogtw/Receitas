@@ -9,19 +9,25 @@ const periods: MealPeriod[] = [
   { id: 'dinner', pairId: 'pair', name: 'Jantar', position: 1, revision: 1, deletedAt: null },
 ]
 
+function renderSettings(overrides: Partial<Parameters<typeof MealPeriodSettings>[0]> = {}) {
+  return render(
+    <MealPeriodSettings
+      periods={periods}
+      onCreate={vi.fn()}
+      onRename={vi.fn()}
+      onReorder={vi.fn()}
+      onDelete={vi.fn()}
+      onClose={vi.fn()}
+      {...overrides}
+    />,
+  )
+}
+
 describe('MealPeriodSettings', () => {
   it('creates a user-defined meal period', async () => {
     const user = userEvent.setup()
     const onCreate = vi.fn(async () => undefined)
-    render(
-      <MealPeriodSettings
-        periods={periods}
-        onCreate={onCreate}
-        onRename={vi.fn()}
-        onReorder={vi.fn()}
-        onClose={vi.fn()}
-      />,
-    )
+    renderSettings({ onCreate })
 
     await user.type(screen.getByLabelText('Novo período'), 'Café da tarde')
     await user.click(screen.getByRole('button', { name: 'Adicionar' }))
@@ -31,15 +37,7 @@ describe('MealPeriodSettings', () => {
   it('renames a period on field blur', async () => {
     const user = userEvent.setup()
     const onRename = vi.fn(async () => undefined)
-    render(
-      <MealPeriodSettings
-        periods={periods}
-        onCreate={vi.fn()}
-        onRename={onRename}
-        onReorder={vi.fn()}
-        onClose={vi.fn()}
-      />,
-    )
+    renderSettings({ onRename })
 
     const name = screen.getByDisplayValue('Café')
     await user.clear(name)
@@ -51,17 +49,18 @@ describe('MealPeriodSettings', () => {
   it('reorders periods with keyboard-accessible buttons', async () => {
     const user = userEvent.setup()
     const onReorder = vi.fn(async () => undefined)
-    render(
-      <MealPeriodSettings
-        periods={periods}
-        onCreate={vi.fn()}
-        onRename={vi.fn()}
-        onReorder={onReorder}
-        onClose={vi.fn()}
-      />,
-    )
+    renderSettings({ onReorder })
 
     await user.click(screen.getByRole('button', { name: 'Mover Jantar para cima' }))
     expect(onReorder).toHaveBeenCalledWith(['dinner', 'breakfast'])
+  })
+
+  it('moves a period to the recoverable trash with an accessible action', async () => {
+    const user = userEvent.setup()
+    const onDelete = vi.fn(async () => undefined)
+    renderSettings({ onDelete })
+
+    await user.click(screen.getByRole('button', { name: 'Mover Café para a lixeira' }))
+    expect(onDelete).toHaveBeenCalledWith('breakfast')
   })
 })
