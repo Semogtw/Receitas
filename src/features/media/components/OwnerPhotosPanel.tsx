@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { PowerSyncDatabase } from '@powersync/web'
 import { TrashRepository } from '../../trash/trash-repository'
-import { BrowserMediaBlobCache } from '../browser/media-blob-cache'
 import type { MediaUploadJob, MediaUploadOwnerType } from '../data/media-upload-queue'
 import { PhotoReadRepository, type PhotoMetadata } from '../data/photo-read-repository'
 import type { MediaRuntime } from '../media-runtime'
@@ -45,7 +44,6 @@ export function OwnerPhotosPanel({
     () => new TrashRepository(database, { pairId, actorUserId }),
     [actorUserId, database, pairId],
   )
-  const localCache = useMemo(() => new BrowserMediaBlobCache(), [])
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [synced, setSynced] = useState<PhotoMetadata[]>([])
   const [jobs, setJobs] = useState<MediaUploadJob[]>([])
@@ -188,7 +186,7 @@ export function OwnerPhotosPanel({
             <figure key={job.id} className="recipe-photo recipe-photo--local">
               <BlobImage
                 alt={job.caption || 'Foto aguardando upload'}
-                load={() => localCache.get(job.id)}
+                load={() => runtime.getPendingBlob(job)}
               />
               <figcaption>
                 {job.caption ? <span>{job.caption}</span> : null}
