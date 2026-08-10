@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-const JWT_REQUIRED_FUNCTIONS = ['pair-invite', 'import-url', 'backup-restore', 'account-admin']
+const JWT_REQUIRED_FUNCTIONS = ['pair-invite', 'import-url', 'backup-restore', 'account-admin', 'permanent-delete']
 export const CANONICAL_MEDIA_BUCKET = 'recipe-media'
 
 function parseRelevantToml(content) {
