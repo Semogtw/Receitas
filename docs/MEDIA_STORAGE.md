@@ -54,6 +54,21 @@ Ao adicionar uma foto:
 
 Falha de upload não deve apagar a única cópia conhecida pelo aplicativo.
 
+### Upload remoto imutável
+
+O bucket canônico é `recipe-media`.
+
+O cliente não possui permissão de `UPDATE`/`DELETE` em `storage.objects` desse bucket. Upload normal é **insert-only** (`upsert: false`). Isso impede que um retry ou cliente modificado sobrescreva silenciosamente um objeto privado que já existe no mesmo path.
+
+Como uma resposta de upload pode se perder depois que o Storage já aceitou o objeto, o retry é idempotente da seguinte forma:
+
+1. tenta `INSERT` no path estável;
+2. se o upload falhar, baixa o objeto já existente pelo fluxo autenticado;
+3. só considera o retry concluído quando tamanho, MIME conhecido e bytes forem idênticos ao blob preparado localmente;
+4. conteúdo divergente mantém a falha em vez de receber overwrite.
+
+A migration `0031_media_storage_insert_only.sql` consolida essa política e remove as políticas históricas de UPDATE/DELETE do browser.
+
 ## 5. “Disponibilizar offline” por receita
 
 Cada receita pode ser marcada, por dispositivo, como **Disponível offline**.
@@ -78,27 +93,35 @@ A UI deve indicar:
 
 Marcar uma receita como disponível offline é uma preferência **local ao dispositivo**, não uma preferência obrigatoriamente sincronizada entre os dois membros.
 
+### Estado de implementação
+
+Esta seção continua sendo requisito de produto. No head de hardening de 2026-08-10, o cache/blob local, resolução de mídia e proteção de uploads pendentes existem, mas a superfície completa de **“Disponibilizar offline” por receita**, com preferência local, download set e estados `downloading/available/partial/error`, ainda não foi implementada. Ela permanece gate aberto de release, não uma funcionalidade implícita do service worker.
+
 ## 6. Acesso sem internet
 
 Sem conexão:
 
 - capas e miniaturas em cache devem continuar aparecendo;
 - mídias já presentes localmente devem abrir normalmente;
-- receitas marcadas para offline devem funcionar com o máximo de conteúdo previamente baixado;
+- receitas marcadas para offline devem funcionar com o máximo de conteúdo previamente baixado quando a feature da seção 5 estiver implementada;
 - uma foto que exista apenas no remoto deve mostrar estado claro de indisponibilidade temporária, sem fingir que o arquivo foi perdido;
 - a ausência do original local não impede acesso aos dados estruturados da receita.
 
 ## 7. Storage remoto
 
-Os originais sincronizados ficam em **Supabase Storage privado**.
+Os originais sincronizados ficam em **Supabase Storage privado**, no bucket `recipe-media`.
 
 Regras:
 
 - não usar bucket público para fotos pessoais;
-- leitura e escrita devem respeitar a autorização do `pair`;
+- leitura respeita membership ativa do `pair` presente no path;
+- browser pode inserir apenas paths estruturados do próprio par;
+- browser não pode atualizar nem apagar fisicamente objetos existentes;
 - caminhos/objetos não substituem RLS ou validações de autorização;
 - URLs de acesso temporário não devem ser tratadas como identificadores permanentes do arquivo;
 - registros do banco devem guardar identidade estável da mídia e referência suficiente para resolver o objeto remoto autorizado.
+
+`supabase/config.toml`, migrations, frontend e restore devem continuar usando exatamente `recipe-media`; `recipe_media` não é alias válido.
 
 ## 8. Integridade e ciclo de vida
 
@@ -121,6 +144,23 @@ Excluir uma foto do produto é diferente de removê-la do cache.
 - exclusão funcional usa o mesmo modelo de soft delete/lixeira aprovado para outras entidades relevantes;
 - exclusão definitiva deve remover metadados e objeto remoto somente após validações apropriadas;
 - uma mídia marcada como excluída não deve reaparecer apenas porque ainda existe um arquivo em cache.
+
+### Hard-delete coordenado pelo servidor
+
+A exclusão definitiva não usa mais um RPC browser-callable que apaga apenas metadata.
+
+O fluxo atual é:
+
+1. o cliente verifica que a row está na lixeira e não possui mutação local pendente;
+2. chama a Edge Function `permanent-delete` enviando somente `entityType` + `entityId`;
+3. a Edge valida o JWT e deriva o par ativo no servidor; `pairId` enviado pelo navegador não é autoridade;
+4. `permanently_delete_entity_server` valida membership e, para uma foto, registra seu `storage_path` em `private.media_delete_queue` **na mesma transação** que remove a metadata;
+5. a Edge tenta remover os objetos da fila usando `service_role` no bucket privado;
+6. sucesso remove a entrada da fila; falha incrementa tentativa/erro técnico e mantém o path retryável.
+
+A antiga `permanently_delete_entity(text, uuid, uuid)` é mantida apenas por compatibilidade de migration, mas perde `EXECUTE` de `anon/authenticated` em `0032_media_permanent_delete_queue.sql`.
+
+Essa fila impede que falha do Storage obrigue o produto a dar DELETE físico ao browser ou perca a informação de qual objeto ficou órfão. O processamento periódico/operacional de uma fila que permaneça falhando ainda precisa ser exercitado no staging antes da release final.
 
 ## 10. Backup
 
@@ -168,14 +208,16 @@ A implementação deve cobrir, no mínimo:
 
 1. foto criada offline permanece visível e protegida até upload confirmado;
 2. falha de upload não apaga a única cópia local;
-3. foto sincronizada pode ser removida do cache sem desaparecer do produto;
-4. reabrir uma foto removida do cache baixa novamente o arquivo quando online;
-5. receita marcada como disponível offline mantém seu conteúdo previamente baixado sem rede;
-6. receita não marcada para offline continua funcional em dados estruturados mesmo se algum original não estiver local;
-7. limpar cache não executa soft delete nem exclusão remota;
-8. logout impede exposição de mídia privada da sessão anterior pela interface;
-9. usuário fora do `pair` não acessa objeto remoto por conhecer seu identificador;
-10. backup completo inclui originais e não substitui silenciosamente arquivos por miniaturas.
+3. retry de upload nunca sobrescreve objeto divergente e aceita apenas objeto já existente idêntico;
+4. foto sincronizada pode ser removida do cache sem desaparecer do produto;
+5. reabrir uma foto removida do cache baixa novamente o arquivo quando online;
+6. receita marcada como disponível offline mantém seu conteúdo previamente baixado sem rede;
+7. receita não marcada para offline continua funcional em dados estruturados mesmo se algum original não estiver local;
+8. limpar cache não executa soft delete nem exclusão remota;
+9. logout impede exposição de mídia privada da sessão anterior pela interface;
+10. usuário fora do `pair` não acessa objeto remoto por conhecer seu identificador;
+11. hard-delete de foto não dá DELETE físico ao browser e deixa falha remota retryável em fila privada;
+12. backup completo inclui originais e não substitui silenciosamente arquivos por miniaturas.
 
 ## 14. Relação com outros documentos
 
