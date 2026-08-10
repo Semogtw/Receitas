@@ -53,6 +53,13 @@ export class BrowserMediaBlobCache {
     this.pairId = assertNonEmpty(pairId, 'Media cache pair scope')
   }
 
+  private assertPendingJob(job: PendingMediaIdentity): void {
+    if (job.pairId !== this.pairId) {
+      throw new Error('Media upload job does not belong to the active cache scope')
+    }
+    assertNonEmpty(job.id, 'Media id')
+  }
+
   private request(mediaId: string): Request {
     return scopedCacheRequest(this.runtime.origin, this.pairId, assertNonEmpty(mediaId, 'Media id'))
   }
@@ -79,9 +86,7 @@ export class BrowserMediaBlobCache {
   }
 
   async getForUpload(job: PendingMediaIdentity): Promise<Blob | null> {
-    if (job.pairId !== this.pairId) {
-      throw new Error('Media upload job does not belong to the active cache scope')
-    }
+    this.assertPendingJob(job)
 
     const scoped = await this.get(job.id)
     if (scoped) return scoped
@@ -91,7 +96,7 @@ export class BrowserMediaBlobCache {
     // allowed to claim a legacy blob; ordinary synced-media reads never fall
     // back to this namespace.
     const cache = await this.runtime.open(MEDIA_CACHE_NAME)
-    const legacyRequest = legacyCacheRequest(this.runtime.origin, assertNonEmpty(job.id, 'Media id'))
+    const legacyRequest = legacyCacheRequest(this.runtime.origin, job.id)
     const legacyResponse = await cache.match(legacyRequest)
     if (!legacyResponse) return null
 
@@ -99,6 +104,16 @@ export class BrowserMediaBlobCache {
     await this.put(job.id, blob)
     await cache.delete(legacyRequest)
     return blob
+  }
+
+  async deleteForUpload(job: PendingMediaIdentity): Promise<boolean> {
+    this.assertPendingJob(job)
+    const cache = await this.runtime.open(MEDIA_CACHE_NAME)
+    const [scopedDeleted, legacyDeleted] = await Promise.all([
+      cache.delete(this.request(job.id)),
+      cache.delete(legacyCacheRequest(this.runtime.origin, job.id)),
+    ])
+    return scopedDeleted || legacyDeleted
   }
 
   async delete(mediaId: string): Promise<boolean> {
