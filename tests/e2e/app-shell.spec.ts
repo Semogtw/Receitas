@@ -1,7 +1,11 @@
 import { expect, test } from '@playwright/test'
+import { signInStagingPair } from './helpers/auth'
+
+test.beforeEach(async ({ page }) => {
+  await signInStagingPair(page)
+})
 
 test('primary shell routes are reachable', async ({ page }) => {
-  await page.goto('/recipes')
   await expect(page.getByRole('heading', { name: 'Receitas' })).toBeVisible()
 
   await page.getByRole('link', { name: 'Planejar' }).click()
@@ -14,7 +18,6 @@ test('primary shell routes are reachable', async ({ page }) => {
 })
 
 test('application shell reloads after the service worker is ready and network goes offline', async ({ page, context }) => {
-  await page.goto('/recipes')
   await expect(page.getByRole('heading', { name: 'Receitas' })).toBeVisible()
 
   await page.evaluate(async () => {
