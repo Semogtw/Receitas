@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from 'lucide-react'
+import { useModalDialog } from '../../../components/accessibility/useModalDialog'
 import type { MealPeriod } from '../domain/types'
 
 interface MealPeriodSettingsProps {
@@ -12,6 +13,7 @@ interface MealPeriodSettingsProps {
 }
 
 export function MealPeriodSettings({ periods, onCreate, onRename, onReorder, onDelete, onClose }: MealPeriodSettingsProps) {
+  const dialogRef = useModalDialog<HTMLDivElement>(onClose)
   const [names, setNames] = useState<Record<string, string>>({})
   const [newName, setNewName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -79,7 +81,7 @@ export function MealPeriodSettings({ periods, onCreate, onRename, onReorder, onD
   }
 
   return (
-    <div className="planner-settings" role="dialog" aria-modal="true" aria-labelledby="planner-periods-title">
+    <div ref={dialogRef} tabIndex={-1} className="planner-settings" role="dialog" aria-modal="true" aria-labelledby="planner-periods-title">
       <div className="planner-settings__panel">
         <header className="planner-settings__header">
           <div>
