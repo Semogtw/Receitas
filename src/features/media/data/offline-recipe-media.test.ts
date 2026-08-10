@@ -87,4 +87,46 @@ describe('OfflineRecipeMediaManager', () => {
     expect(result).toMatchObject({ enabled: true, total: 2, cached: 1, missing: 1, failed: 1, state: 'partial' })
     expect(await manager.isEnabled('recipe-a')).toBe(true)
   })
+
+  it('reconciles newly synced media without rewriting the device preference', async () => {
+    const media: Array<{ id: string; storage_path: string }> = []
+    const { database, execute } = createDatabase(media)
+    const cached = new Set<string>()
+    const runtime = {
+      hasCachedBlob: vi.fn(async (id: string) => cached.has(id)),
+      resolveBlob: vi.fn(async (id: string) => {
+        cached.add(id)
+        return new Blob(['image'])
+      }),
+    }
+    const manager = new OfflineRecipeMediaManager(database, runtime as never, 'pair-a')
+
+    await manager.setEnabled('recipe-a', true)
+    execute.mockClear()
+    media.push({ id: 'photo-new', storage_path: 'pairs/pair-a/recipes/recipe-a/new.webp' })
+
+    const result = await manager.reconcile('recipe-a')
+
+    expect(result).toMatchObject({ enabled: true, total: 1, cached: 1, missing: 0, failed: 0, state: 'available' })
+    expect(runtime.resolveBlob).toHaveBeenCalledWith('photo-new', media[0].storage_path)
+    expect(execute).not.toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO device_preferences'),
+      expect.anything(),
+    )
+  })
+
+  it('does not download media while the recipe is not pinned on this device', async () => {
+    const media = [{ id: 'photo-a', storage_path: 'pairs/pair-a/recipes/recipe-a/a.webp' }]
+    const { database } = createDatabase(media)
+    const runtime = {
+      hasCachedBlob: vi.fn(async () => false),
+      resolveBlob: vi.fn(),
+    }
+    const manager = new OfflineRecipeMediaManager(database, runtime as never, 'pair-a')
+
+    const result = await manager.reconcile('recipe-a')
+
+    expect(result).toMatchObject({ enabled: false, total: 1, cached: 0, missing: 1, failed: 0, state: 'disabled' })
+    expect(runtime.resolveBlob).not.toHaveBeenCalled()
+  })
 })
