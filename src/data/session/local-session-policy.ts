@@ -1,8 +1,8 @@
 export type LogoutLocalStateResult = 'safe' | 'pending_data_preserved'
 
 export interface LocalStateReadDatabase {
-  get<T>(sql: string, parameters?: readonly unknown[]): Promise<T>
-  getOptional<T>(sql: string, parameters?: readonly unknown[]): Promise<T | null>
+  get<T>(sql: string, parameters?: unknown[]): Promise<T>
+  getOptional<T>(sql: string, parameters?: unknown[]): Promise<T | null>
 }
 
 interface CountRow {
