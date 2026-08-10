@@ -13,6 +13,7 @@ interface MealPeriodSettingsProps {
 
 export function MealPeriodSettings({ periods, onCreate, onRename, onReorder, onDelete, onClose }: MealPeriodSettingsProps) {
   const [names, setNames] = useState<Record<string, string>>({})
+  const [newName, setNewName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -22,15 +23,12 @@ export function MealPeriodSettings({ periods, onCreate, onRename, onReorder, onD
 
   async function createPeriod(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = event.currentTarget
-    const input = form.elements.namedItem('new-period') as HTMLInputElement | null
-    const name = input?.value.trim() ?? ''
-    if (!name) return
+    if (!newName.trim()) return
     setBusy(true)
     setError(null)
     try {
-      await onCreate(name)
-      if (input) input.value = ''
+      await onCreate(newName)
+      setNewName('')
     } catch {
       setError('Não foi possível criar o período.')
     } finally {
@@ -142,12 +140,13 @@ export function MealPeriodSettings({ periods, onCreate, onRename, onReorder, onD
           <label className="field-stack">
             <span>Novo período</span>
             <input
-              name="new-period"
+              value={newName}
+              onChange={(event) => setNewName(event.target.value)}
               placeholder="Ex.: Café da tarde"
               maxLength={80}
             />
           </label>
-          <button type="submit" className="button button--quiet" disabled={busy}>
+          <button type="submit" className="button button--quiet" disabled={busy || !newName.trim()}>
             <Plus aria-hidden="true" /> Adicionar
           </button>
         </form>
