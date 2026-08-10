@@ -106,6 +106,13 @@ export function ShoppingRoute() {
     await refresh()
   }
 
+  async function deleteList(id: string) {
+    if (!repositories) return
+    await repositories.shopping.softDeleteShoppingList(id)
+    if (activeListId === id) setActiveListId(null)
+    await refresh()
+  }
+
   async function addManualItem(draft: ShoppingItemDraft) {
     if (!repositories || !activeListId) return
     await repositories.shopping.addItem(activeListId, draft)
@@ -212,6 +219,7 @@ export function ShoppingRoute() {
             onSelect={setActiveListId}
             onCreate={createList}
             onSetDefault={setDefaultList}
+            onDelete={deleteList}
           />
 
           {activeList ? (
