@@ -4,7 +4,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { buildPagesHeaders, resolveReleasePublicEnv } from './generate-pages-headers.mjs'
+import {
+  assertCloudflareHeaderLimits,
+  buildPagesHeaders,
+  CLOUDFLARE_HEADER_VALUE_LIMIT,
+  resolveReleasePublicEnv,
+} from './generate-pages-headers.mjs'
 
 const INPUT = {
   supabaseUrl: 'https://abc.supabase.co',
@@ -39,6 +44,17 @@ test('rejects non-https or non-origin endpoint values', () => {
   assert.throws(() => buildPagesHeaders({ ...INPUT, supabaseUrl: 'http://abc.supabase.co' }), /must use https/)
   assert.throws(() => buildPagesHeaders({ ...INPUT, powersyncUrl: 'https://example.powersync.journeyapps.com/path' }), /only an origin/)
   assert.throws(() => buildPagesHeaders({ ...INPUT, powersyncUrl: 'https://user:pass@example.invalid' }), /must not contain URL credentials/)
+})
+
+test('rejects generated header values larger than the Cloudflare Pages limit', () => {
+  const allowed = `/*\n  X-Test: ${'x'.repeat(CLOUDFLARE_HEADER_VALUE_LIMIT)}\n`
+  assert.doesNotThrow(() => assertCloudflareHeaderLimits(allowed))
+
+  const oversized = `/*\n  X-Test: ${'x'.repeat(CLOUDFLARE_HEADER_VALUE_LIMIT + 1)}\n`
+  assert.throws(
+    () => assertCloudflareHeaderLimits(oversized),
+    /X-Test exceeds Cloudflare Pages header value limit/,
+  )
 })
 
 test('resolves only public release endpoints with Vite production precedence', async () => {
