@@ -119,8 +119,10 @@ export class OfflineRecipeMediaManager {
     }
   }
 
-  async prepare(recipeId: string): Promise<OfflineRecipeMediaPrepareResult> {
-    await this.setEnabled(recipeId, true)
+  async reconcile(recipeId: string): Promise<OfflineRecipeMediaPrepareResult> {
+    const enabled = await this.isEnabled(recipeId)
+    if (!enabled) return { ...await this.inspect(recipeId), failed: 0 }
+
     const media = await this.listMedia(recipeId)
     let failed = 0
 
@@ -135,5 +137,10 @@ export class OfflineRecipeMediaManager {
 
     const status = await this.inspect(recipeId)
     return { ...status, failed }
+  }
+
+  async prepare(recipeId: string): Promise<OfflineRecipeMediaPrepareResult> {
+    await this.setEnabled(recipeId, true)
+    return this.reconcile(recipeId)
   }
 }
