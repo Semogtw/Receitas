@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Plus, Trash2, X } from 'lucide-react'
 import type { MealPeriod } from '../domain/types'
 
 interface MealPeriodSettingsProps {
@@ -7,12 +7,12 @@ interface MealPeriodSettingsProps {
   onCreate: (name: string) => Promise<void> | void
   onRename: (id: string, name: string) => Promise<void> | void
   onReorder: (ids: string[]) => Promise<void> | void
+  onDelete: (id: string) => Promise<void> | void
   onClose: () => void
 }
 
-export function MealPeriodSettings({ periods, onCreate, onRename, onReorder, onClose }: MealPeriodSettingsProps) {
+export function MealPeriodSettings({ periods, onCreate, onRename, onReorder, onDelete, onClose }: MealPeriodSettingsProps) {
   const [names, setNames] = useState<Record<string, string>>({})
-  const [newName, setNewName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -22,12 +22,15 @@ export function MealPeriodSettings({ periods, onCreate, onRename, onReorder, onC
 
   async function createPeriod(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!newName.trim()) return
+    const form = event.currentTarget
+    const input = form.elements.namedItem('new-period') as HTMLInputElement | null
+    const name = input?.value.trim() ?? ''
+    if (!name) return
     setBusy(true)
     setError(null)
     try {
-      await onCreate(newName)
-      setNewName('')
+      await onCreate(name)
+      if (input) input.value = ''
     } catch {
       setError('Não foi possível criar o período.')
     } finally {
@@ -60,6 +63,18 @@ export function MealPeriodSettings({ periods, onCreate, onRename, onReorder, onC
       await onReorder(ids)
     } catch {
       setError('Não foi possível reordenar os períodos.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function moveToTrash(period: MealPeriod) {
+    setBusy(true)
+    setError(null)
+    try {
+      await onDelete(period.id)
+    } catch {
+      setError('Não foi possível mover o período para a lixeira.')
     } finally {
       setBusy(false)
     }
@@ -109,6 +124,15 @@ export function MealPeriodSettings({ periods, onCreate, onRename, onReorder, onC
                 >
                   <ArrowDown aria-hidden="true" />
                 </button>
+                <button
+                  type="button"
+                  className="icon-button"
+                  disabled={busy}
+                  onClick={() => void moveToTrash(period)}
+                  aria-label={`Mover ${period.name} para a lixeira`}
+                >
+                  <Trash2 aria-hidden="true" />
+                </button>
               </div>
             </div>
           ))}
@@ -118,13 +142,12 @@ export function MealPeriodSettings({ periods, onCreate, onRename, onReorder, onC
           <label className="field-stack">
             <span>Novo período</span>
             <input
-              value={newName}
-              onChange={(event) => setNewName(event.target.value)}
+              name="new-period"
               placeholder="Ex.: Café da tarde"
               maxLength={80}
             />
           </label>
-          <button type="submit" className="button button--quiet" disabled={busy || !newName.trim()}>
+          <button type="submit" className="button button--quiet" disabled={busy}>
             <Plus aria-hidden="true" /> Adicionar
           </button>
         </form>
