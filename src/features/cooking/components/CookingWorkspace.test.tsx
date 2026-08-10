@@ -117,6 +117,46 @@ describe('CookingWorkspace', () => {
     expect(fakes.clear).not.toHaveBeenCalled()
   })
 
+  it('restores the persisted step after a full workspace remount', async () => {
+    const user = userEvent.setup()
+    let persistedDraft: CookingDraft = existingDraft
+
+    fakes.load.mockImplementation(async () => persistedDraft)
+    fakes.save.mockImplementation(async (next: CookingDraft) => {
+      persistedDraft = next
+    })
+
+    const firstMount = render(
+      <CookingWorkspace
+        database={{} as never}
+        pairId="pair-a"
+        actorUserId="user-a"
+        recipe={recipe}
+        onExit={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Misture.' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Próxima etapa' }))
+    await waitFor(() => expect(persistedDraft.currentStepIndex).toBe(1))
+
+    firstMount.unmount()
+
+    render(
+      <CookingWorkspace
+        database={{} as never}
+        pairId="pair-a"
+        actorUserId="user-a"
+        recipe={recipe}
+        onExit={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Asse.' })).toBeInTheDocument()
+    expect(fakes.load).toHaveBeenCalledTimes(2)
+    expect(fakes.clear).not.toHaveBeenCalled()
+  })
+
   it('requires an explicit choice before replacing a draft from another recipe', async () => {
     const user = userEvent.setup()
     fakes.load.mockResolvedValue({
