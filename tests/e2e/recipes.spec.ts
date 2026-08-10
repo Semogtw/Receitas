@@ -29,7 +29,7 @@ test('creates, reloads, edits and soft-deletes a recipe through the real UI', as
   await expect(page.getByRole('heading', { name: originalTitle })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Cozinhar agora' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Disponibilidade offline' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: /Fotos da receita/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Como ficou' })).toBeVisible()
 
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: 'Receitas' })).toBeVisible()
