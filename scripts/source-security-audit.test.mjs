@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { inspectMigrationSequence, inspectSupabaseConfig } from './source-security-audit.mjs'
+import {
+  inspectMigrationSequence,
+  inspectPrivatePrivilegeSql,
+  inspectSupabaseConfig,
+} from './source-security-audit.mjs'
 
 const SECURE_CONFIG = `
 [auth]
@@ -71,4 +75,32 @@ test('rejects gaps and duplicate migration numbers', () => {
 
   assert(findings.some((finding) => finding.includes('missing migration number 0002')))
   assert(findings.some((finding) => finding.includes('duplicate migration number 0003')))
+})
+
+test('rejects browser-role access to the private schema or private functions', () => {
+  assert.deepEqual(inspectPrivatePrivilegeSql(`
+    revoke all on schema private from public, anon, authenticated;
+    revoke all on function private.secret(uuid) from public, anon, authenticated;
+    grant execute on function private.secret(uuid) to service_role;
+  `), [])
+
+  const schemaFindings = inspectPrivatePrivilegeSql(
+    'GRANT USAGE ON SCHEMA private TO authenticated;',
+    '0031_bad_schema.sql',
+  )
+  assert(schemaFindings.some((finding) => finding.includes('private schema USAGE')))
+
+  const functionFindings = inspectPrivatePrivilegeSql(
+    'grant execute on function private.secret(uuid) to anon;',
+    '0032_bad_function.sql',
+  )
+  assert(functionFindings.some((finding) => finding.includes('private function EXECUTE')))
+})
+
+test('ignores unsafe-looking privilege text inside SQL comments', () => {
+  assert.deepEqual(inspectPrivatePrivilegeSql(`
+    -- grant usage on schema private to authenticated;
+    /* grant execute on function private.secret(uuid) to anon; */
+    revoke all on schema private from public, anon, authenticated;
+  `), [])
 })
