@@ -32,7 +32,7 @@ function fixture(overrides: Partial<{
     remove: vi.fn(async () => undefined),
   }
   const blobs = {
-    get: vi.fn(async () => overrides.blob === undefined ? new Blob(['image'], { type: 'image/webp' }) : overrides.blob),
+    getForUpload: vi.fn(async (_job: MediaUploadJob) => overrides.blob === undefined ? new Blob(['image'], { type: 'image/webp' }) : overrides.blob),
   }
   const storage = { upload: vi.fn(async () => undefined) }
   const metadata = { publish: vi.fn(async () => undefined) }
@@ -46,6 +46,7 @@ describe('processNextMediaUpload', () => {
 
     expect(result).toEqual({ status: 'uploaded', mediaId: 'photo-a' })
     expect(queue.markUploading).toHaveBeenCalledWith('photo-a')
+    expect(blobs.getForUpload).toHaveBeenCalledWith(job)
     expect(storage.upload).toHaveBeenCalledWith(
       'pairs/pair-a/recipes/recipe-a/photo-a.webp',
       expect.any(Blob),
@@ -65,6 +66,7 @@ describe('processNextMediaUpload', () => {
 
     await expect(processNextMediaUpload(fixtureValue)).resolves.toEqual({ status: 'idle' })
     expect(fixtureValue.storage.upload).not.toHaveBeenCalled()
+    expect(fixtureValue.blobs.getForUpload).not.toHaveBeenCalled()
   })
 
   it('marks a missing cached blob as failed and never publishes metadata', async () => {
@@ -84,5 +86,14 @@ describe('processNextMediaUpload', () => {
     expect(value.storage.upload).toHaveBeenCalledTimes(1)
     expect(value.queue.remove).not.toHaveBeenCalled()
     expect(value.queue.markFailed).toHaveBeenCalledWith('photo-a', 'database offline')
+  })
+
+  it('treats a pair-scope blob rejection as a recoverable upload failure', async () => {
+    const value = fixture()
+    value.blobs.getForUpload.mockRejectedValueOnce(new Error('Media upload job does not belong to the active cache scope'))
+
+    await expect(processNextMediaUpload(value)).resolves.toEqual({ status: 'failed', mediaId: 'photo-a' })
+    expect(value.storage.upload).not.toHaveBeenCalled()
+    expect(value.queue.markFailed).toHaveBeenCalledWith('photo-a', expect.stringContaining('active cache scope'))
   })
 })
