@@ -15,6 +15,7 @@ const routes = [
 <CompleteRestorePanel database={database} />
 <ReplaceRestorePanel database={database} />
 <AccountAdminScreen database={database} />
+<TrashPanel database={database} />
 `,
   main: `
 import './styles/cooking.css'
@@ -22,6 +23,11 @@ import './styles/media.css'
 import './styles/account-admin.css'
 `,
   recipesRoute: `
+const mediaRuntime = createBrowserMediaRuntime(database, {
+  pairId: auth.pairId,
+  actorUserId: auth.userId,
+})
+useMediaUploadSync(mediaRuntime)
 <RecipePhotosPanel runtime={mediaRuntime} />
 <OfflineRecipeAvailability runtime={mediaRuntime} />
 <CookingWorkspace mediaRuntime={mediaRuntime} />
@@ -50,10 +56,11 @@ const routes = [
   assert(findings.some((finding) => finding.includes('outside AuthGate')))
 })
 
-test('rejects restore or account recovery components becoming unreachable', () => {
+test('rejects restore, trash or account recovery components becoming unreachable', () => {
   const findings = inspectUiIntegration({ ...SAFE, settings: '<CompleteRestorePanel database={database} />' })
   assert(findings.some((finding) => finding.includes('ReplaceRestorePanel')))
   assert(findings.some((finding) => finding.includes('AccountAdminScreen')))
+  assert(findings.some((finding) => finding.includes('TrashPanel')))
 })
 
 test('rejects release-critical styles disappearing from the bundle', () => {
@@ -72,6 +79,22 @@ test('rejects recipe media or cooking surfaces becoming unreachable again', () =
   assert(findings.some((finding) => finding.includes('RecipePhotosPanel')))
   assert(findings.some((finding) => finding.includes('OfflineRecipeAvailability')))
   assert(findings.some((finding) => finding.includes('shared media runtime')))
+  assert(findings.some((finding) => finding.includes('reconnect drain')))
+  assert(findings.some((finding) => finding.includes('full authenticated pair scope')))
   assert(findings.some((finding) => finding.includes('cooking mode action')))
   assert(findings.some((finding) => finding.includes('session photo capture')))
+})
+
+test('rejects actor-only media runtime construction even when media surfaces remain mounted', () => {
+  const findings = inspectUiIntegration({
+    ...SAFE,
+    recipesRoute: `
+const mediaRuntime = createBrowserMediaRuntime(database, auth.userId)
+useMediaUploadSync(mediaRuntime)
+<RecipePhotosPanel runtime={mediaRuntime} />
+<OfflineRecipeAvailability runtime={mediaRuntime} />
+<CookingWorkspace mediaRuntime={mediaRuntime} />
+`,
+  })
+  assert(findings.some((finding) => finding.includes('full authenticated pair scope')))
 })
