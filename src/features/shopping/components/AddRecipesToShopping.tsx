@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import { useMemo, useState, type FormEvent } from 'react'
+import { useModalDialog } from '../../../components/accessibility/useModalDialog'
 import type { RecipeSummary } from '../../recipes/data/recipe-repository'
 import { formatAmount, parseAmount } from '../../recipes/domain/amount'
 import type { Rational } from '../../recipes/domain/types'
@@ -42,6 +43,7 @@ export function AddRecipesToShopping({
   onConfirm,
   onClose,
 }: AddRecipesToShoppingProps) {
+  const dialogRef = useModalDialog<HTMLDivElement>(onClose)
   const today = useMemo(() => todayDateOnly(), [])
   const [mode, setMode] = useState<'recipes' | 'planner'>('recipes')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -142,7 +144,7 @@ export function AddRecipesToShopping({
   }
 
   return (
-    <div className="shopping-generator" role="dialog" aria-modal="true" aria-labelledby="shopping-generator-title">
+    <div ref={dialogRef} tabIndex={-1} className="shopping-generator" role="dialog" aria-modal="true" aria-labelledby="shopping-generator-title">
       <div className="shopping-generator__panel">
         <header className="shopping-generator__header">
           <div>
