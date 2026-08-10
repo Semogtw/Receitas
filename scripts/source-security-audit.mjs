@@ -4,47 +4,69 @@ import { pathToFileURL } from 'node:url'
 
 const JWT_REQUIRED_FUNCTIONS = ['pair-invite', 'import-url', 'backup-restore', 'account-admin']
 
-function tomlBoolean(content, key) {
-  const match = content.match(new RegExp(`^\\s*${key}\\s*=\\s*(true|false)\\s*$`, 'm'))
-  return match ? match[1] === 'true' : null
+function parseRelevantToml(content) {
+  const sections = new Map()
+  let currentSection = ''
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line || line.startsWith('#')) continue
+
+    const sectionMatch = line.match(/^\[([^\]]+)\]$/)
+    if (sectionMatch) {
+      currentSection = sectionMatch[1]
+      if (!sections.has(currentSection)) sections.set(currentSection, new Map())
+      continue
+    }
+
+    const assignment = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*(.+)$/)
+    if (!assignment) continue
+    if (!sections.has(currentSection)) sections.set(currentSection, new Map())
+    sections.get(currentSection).set(assignment[1], assignment[2].trim())
+  }
+
+  return sections
 }
 
-function tomlInteger(content, key) {
-  const match = content.match(new RegExp(`^\\s*${key}\\s*=\\s*(\\d+)\\s*$`, 'm'))
-  return match ? Number(match[1]) : null
+function value(sections, section, key) {
+  return sections.get(section)?.get(key) ?? null
 }
 
-function tomlSection(content, name) {
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const match = content.match(new RegExp(`^\\[${escaped}\\]\\s*$([\\s\\S]*?)(?=^\\[|\\s*$)`, 'm'))
-  return match?.[1] ?? null
+function booleanValue(sections, section, key) {
+  const raw = value(sections, section, key)
+  if (raw === 'true') return true
+  if (raw === 'false') return false
+  return null
+}
+
+function integerValue(sections, section, key) {
+  const raw = value(sections, section, key)
+  return raw && /^\d+$/.test(raw) ? Number(raw) : null
 }
 
 export function inspectSupabaseConfig(content) {
   const findings = []
-  const auth = tomlSection(content, 'auth') ?? ''
-  const authEmail = tomlSection(content, 'auth.email') ?? ''
-  const recipeMedia = tomlSection(content, 'storage.buckets.recipe_media') ?? ''
+  const sections = parseRelevantToml(content)
 
-  if (tomlBoolean(auth, 'enable_signup') !== false) findings.push('auth.enable_signup must remain false')
-  if (tomlBoolean(authEmail, 'enable_signup') !== false) findings.push('auth.email.enable_signup must remain false')
-  if (tomlBoolean(auth, 'enable_anonymous_sign_ins') !== false) findings.push('auth.enable_anonymous_sign_ins must remain false')
+  if (booleanValue(sections, 'auth', 'enable_signup') !== false) findings.push('auth.enable_signup must remain false')
+  if (booleanValue(sections, 'auth.email', 'enable_signup') !== false) findings.push('auth.email.enable_signup must remain false')
+  if (booleanValue(sections, 'auth', 'enable_anonymous_sign_ins') !== false) findings.push('auth.enable_anonymous_sign_ins must remain false')
 
-  const minimumPasswordLength = tomlInteger(auth, 'minimum_password_length')
+  const minimumPasswordLength = integerValue(sections, 'auth', 'minimum_password_length')
   if (minimumPasswordLength === null || minimumPasswordLength < 12) {
     findings.push('auth.minimum_password_length must be at least 12')
   }
 
-  if (tomlBoolean(recipeMedia, 'public') !== false) findings.push('recipe_media bucket must remain private')
+  if (booleanValue(sections, 'storage.buckets.recipe_media', 'public') !== false) {
+    findings.push('recipe_media bucket must remain private')
+  }
 
-  const bootstrap = tomlSection(content, 'functions.bootstrap') ?? ''
-  if (tomlBoolean(bootstrap, 'verify_jwt') !== false) {
+  if (booleanValue(sections, 'functions.bootstrap', 'verify_jwt') !== false) {
     findings.push('bootstrap JWT exception must remain explicit; bootstrap performs its own one-time authorization')
   }
 
   for (const functionName of JWT_REQUIRED_FUNCTIONS) {
-    const section = tomlSection(content, `functions.${functionName}`) ?? ''
-    if (tomlBoolean(section, 'verify_jwt') !== true) {
+    if (booleanValue(sections, `functions.${functionName}`, 'verify_jwt') !== true) {
       findings.push(`${functionName} must require Supabase JWT verification`)
     }
   }
