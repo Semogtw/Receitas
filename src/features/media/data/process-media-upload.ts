@@ -9,7 +9,7 @@ interface MediaUploadQueue {
 }
 
 interface MediaBlobReader {
-  get(mediaId: string): Promise<Blob | null>
+  getForUpload(job: MediaUploadJob): Promise<Blob | null>
 }
 
 interface MediaStorageGateway {
@@ -43,7 +43,7 @@ export async function processNextMediaUpload(input: {
   await input.queue.markUploading(job.id)
 
   try {
-    const blob = await input.blobs.get(job.id)
+    const blob = await input.blobs.getForUpload(job)
     if (!blob) throw new Error('Prepared media is no longer cached on this device')
 
     const storagePath = buildMediaStoragePath({
