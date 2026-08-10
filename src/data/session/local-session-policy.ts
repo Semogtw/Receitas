@@ -1,11 +1,16 @@
 export type LogoutLocalStateResult = 'safe' | 'pending_data_preserved'
 
 export interface LocalStateReadDatabase {
-  get<T>(sql: string): Promise<T>
+  get<T>(sql: string, parameters?: readonly unknown[]): Promise<T>
+  getOptional<T>(sql: string, parameters?: readonly unknown[]): Promise<T | null>
 }
 
 interface CountRow {
   count: number | string | null
+}
+
+interface PreferenceRow {
+  value_json: string
 }
 
 async function count(database: LocalStateReadDatabase, sql: string): Promise<number> {
@@ -13,21 +18,28 @@ async function count(database: LocalStateReadDatabase, sql: string): Promise<num
   return Number(row?.count ?? 0)
 }
 
+function protectedMediaQueueCount(value: string): number {
+  try {
+    const parsed = JSON.parse(value)
+    if (!Array.isArray(parsed)) return 1
+    return parsed.length
+  } catch {
+    // A malformed queue must never be interpreted as safe-to-discard local data.
+    return 1
+  }
+}
+
 export async function prepareLocalStateForLogout(
   database: LocalStateReadDatabase,
 ): Promise<LogoutLocalStateResult> {
-  const [pendingMutations, protectedMedia] = await Promise.all([
+  const [pendingMutations, mediaQueue] = await Promise.all([
     count(database, 'SELECT count(*) AS count FROM mutation_outbox'),
-    count(
-      database,
-      `SELECT (
-        (SELECT count(*) FROM recipe_photos
-          WHERE storage_state IN ('local_only', 'upload_pending', 'uploading', 'failed')) +
-        (SELECT count(*) FROM cooking_session_photos
-          WHERE storage_state IN ('local_only', 'upload_pending', 'uploading', 'failed'))
-      ) AS count`,
+    database.getOptional<PreferenceRow>(
+      'SELECT value_json FROM device_preferences WHERE id = ? LIMIT 1',
+      ['media_upload_queue_v1'],
     ),
   ])
 
+  const protectedMedia = mediaQueue ? protectedMediaQueueCount(mediaQueue.value_json) : 0
   return pendingMutations > 0 || protectedMedia > 0 ? 'pending_data_preserved' : 'safe'
 }
