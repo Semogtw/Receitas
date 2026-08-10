@@ -13,7 +13,7 @@ export function inspectUiIntegration({ router, settings, main, recipesRoute = ''
     findings.push('replacement completion route must remain outside AuthGate')
   }
 
-  for (const component of ['CompleteRestorePanel', 'ReplaceRestorePanel', 'AccountAdminScreen']) {
+  for (const component of ['CompleteRestorePanel', 'ReplaceRestorePanel', 'AccountAdminScreen', 'TrashPanel']) {
     if (!settings.includes(`<${component}`)) findings.push(`${component} must remain reachable from SettingsRoute`)
   }
 
@@ -27,6 +27,17 @@ export function inspectUiIntegration({ router, settings, main, recipesRoute = ''
     }
     if (!recipesRoute.includes('mediaRuntime={mediaRuntime')) {
       findings.push('CookingWorkspace must receive the shared media runtime')
+    }
+    if (!recipesRoute.includes('useMediaUploadSync(mediaRuntime)')) {
+      findings.push('recipe route must keep the durable media reconnect drain mounted')
+    }
+    if (
+      !recipesRoute.includes('createBrowserMediaRuntime(database, {') ||
+      !recipesRoute.includes('pairId: auth.pairId') ||
+      !recipesRoute.includes('actorUserId: auth.userId') ||
+      recipesRoute.includes('createBrowserMediaRuntime(database, auth.userId)')
+    ) {
+      findings.push('browser media runtime must be created with the full authenticated pair scope')
     }
   }
 
