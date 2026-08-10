@@ -23,18 +23,23 @@ Até um projeto inequivocamente pertencente a Receitas aparecer no ambiente cone
 
 ```bash
 node --version
-# esperado: v24.18.0 conforme .node-version, ou Node 24 compatível com engines
+# esperado: v24.18.0 conforme .node-version
 
 corepack enable
 pnpm --version
 # projeto fixa pnpm@10.15.0
 
+deno --version
+# gate remoto atual usa Deno 2.8.1
+
 pnpm install --frozen-lockfile
 ```
 
+O frozen install continua bloqueado até `pnpm-lock.yaml` ser versionado.
+
 Se checkout ou GitHub Actions forem necessários para executar estes gates remotamente, use o **repositório de toolchains**. Não adicione workflows de execução descartável ao repositório Receitas.
 
-## 3. Gates locais antes de qualquer staging
+## 3. Gates antes de qualquer staging
 
 Execute na branch/candidato exato de release:
 
@@ -44,6 +49,7 @@ pnpm verify:source
 pnpm lint
 pnpm typecheck
 pnpm test:run
+pnpm verify:edge
 ```
 
 Esses gates cobrem, entre outros:
@@ -51,23 +57,28 @@ Esses gates cobrem, entre outros:
 - custo zero e ausência de Pages Functions;
 - signup fechado, senha mínima, Storage privado e JWT das Edge Functions;
 - sequência contínua de migrations;
+- schema `private` sem grants para browser roles;
 - Workbox sem runtime cache privado;
 - integration guards de restore/recovery;
-- geração de headers com origens exatas;
-- scanner de material privilegiado no artefato.
+- geração de headers com origens exatas e limite de tamanho do Cloudflare Pages;
+- scanner de material privilegiado no artefato;
+- testes + typecheck das Supabase Edge Functions em Deno.
 
 Nenhum desses resultados deve ser inferido a partir de revisão estática: registre a execução real.
 
 ## 4. Build estático do Cloudflare Pages
 
-O build precisa conhecer somente os endpoints públicos reais do ambiente:
+O build precisa conhecer somente a configuração pública real do ambiente:
 
 ```bash
 export VITE_SUPABASE_URL='https://<receitas-staging>.supabase.co'
+export VITE_SUPABASE_ANON_KEY='<public-anon-key-do-staging>'
 export VITE_POWERSYNC_URL='https://<receitas-staging>.powersync...'
 export RELEASE_ENV='preview'
 pnpm build:pages
 ```
+
+`VITE_SUPABASE_ANON_KEY` é uma credencial pública destinada ao navegador e **não** deve ser confundida com `service_role`/secret key.
 
 `build:pages` executa:
 
@@ -88,14 +99,18 @@ Ordem:
 
 1. configurar Auth com signup/anônimo fechados e senha mínima compatível com `supabase/config.toml`;
 2. aplicar migrations `0001` até a migration mais recente, sem pular/renumerar histórico;
-3. confirmar bucket `recipe-media` privado;
-4. confirmar bucket privado de restore staging quando criado pelas migrations;
+3. confirmar bucket `recipe_media` privado;
+4. confirmar bucket `restore-staging` privado;
 5. provisionar secrets server-only necessários às Edge Functions;
 6. publicar `bootstrap`, `pair-invite`, `import-url`, `backup-restore` e `account-admin` com a política JWT declarada no source;
 7. executar testes SQL/pgTAP e testes Deno contra esse staging;
 8. criar somente a identidade/par de teste dedicado ao E2E.
 
 Nunca copie dados pessoais de produção para staging.
+
+### Gate específico do import por URL
+
+O importador agora fixa cada conexão ao IP público previamente resolvido/validado e re-resolve/re-fixa cada redirect para mitigar DNS rebinding. O Deno gate prova tipos e comportamento unitário, mas o staging deve confirmar que o Supabase Edge Runtime implantado aceita o `Deno.createHttpClient` usado no transporte pinado antes de promoção.
 
 ## 6. Provisionar PowerSync staging
 
@@ -112,20 +127,31 @@ Configuração esperada:
 
 - output: `dist`;
 - build command: `pnpm build:pages`;
-- Node 24;
+- Node 24.18.0;
 - nenhuma Pages Function;
-- somente `VITE_SUPABASE_URL`, `VITE_POWERSYNC_URL` e `RELEASE_ENV=preview` como configuração browser/release;
+- somente `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_POWERSYNC_URL` e `RELEASE_ENV=preview` como configuração browser/release;
 - preview HTTPS antes de qualquer promoção.
 
-Depois do deploy confirme na resposta HTTP:
+Depois do deploy, informe o origin exato:
 
-- CSP gerada;
+```bash
+export E2E_DEPLOYED_URL='https://<preview>.pages.dev'
+pnpm verify:deployed
+```
+
+O gate consulta as respostas HTTP reais e confirma:
+
+- CSP gerada e sem wildcards amplos de rede;
+- valor de CSP dentro do limite do provedor;
 - `X-Content-Type-Options: nosniff`;
 - `Referrer-Policy: no-referrer`;
 - `X-Frame-Options: DENY`;
 - `X-Robots-Tag: noindex, nofollow`;
-- deep links retornam `index.html` com status 200;
-- `robots.txt` contém `Disallow: /`.
+- deep links retornam o shell SPA com status 200;
+- `robots.txt` contém `Disallow: /`;
+- HTML contém metadata `noindex,nofollow`.
+
+`vite preview` **não** substitui esse gate porque não emula o processamento de `_headers` do Cloudflare Pages.
 
 ## 8. Aceitação em staging
 
@@ -137,7 +163,16 @@ export E2E_PASSWORD='...'
 pnpm verify:release
 ```
 
-A suíte de release inclui shell/offline, import, backup/restore, diagnósticos e superfícies de recovery.
+A suíte de release inclui:
+
+- shell e reload offline;
+- criação de receita offline → reload → reconnect → confirmação em um contexto de browser novo;
+- import;
+- backup/restore;
+- diagnósticos;
+- superfícies de recovery.
+
+O E2E de recuperação offline cria uma fixture com UUID e remove apenas essa fixture ao final.
 
 Para o round-trip destrutivo de `replace_all`, o opt-in precisa ser deliberado:
 
@@ -147,19 +182,35 @@ export E2E_DESTRUCTIVE_RESTORE=1
 
 Nunca habilite esse opt-in contra produção.
 
-## 9. Gap conhecido antes de declarar Task 4 completo
+## 9. PWA e persistência local
 
-O plano de receitas/cozinha descreve `src/features/cooking/data/cooking-draft-store.ts` e `src/features/cooking/components/CookingMode.tsx` como mecanismo de cooking-in-progress device-local. Esses arquivos **não existem no head atual**.
+O head atual contém e testa:
 
-Consequências:
+- `src/features/cooking/data/local-cooking-draft-store.ts`;
+- `src/features/cooking/components/CookingMode.tsx`;
+- `src/features/cooking/components/CookingWorkspace.tsx`.
 
-- é correto afirmar que o PWA exige update explícito e não runtime-cacheia dados privados;
-- é correto testar que dados já persistidos no banco local sobrevivem a reload;
-- **não** é correto afirmar que um draft ativo de cozinha sobrevive a update/reload, porque essa feature ainda não foi implementada.
+O cooking draft ativo fica em `device_preferences` e existe teste que avança uma etapa, desmonta todo o workspace e monta novamente, retomando exatamente a etapa persistida.
 
-Esse gap deve ser resolvido no plano de cooking ou explicitamente retirado do escopo da primeira release antes de marcar a aceitação correspondente como verde.
+Além disso:
 
-## 10. Promoção para produção
+- Workbox está com `runtimeCaching: []`;
+- atualização é explícita via prompt;
+- o E2E de offline recovery cobre persistência de uma mutação de receita no banco local através de reload completo e posterior chegada em um contexto limpo via sync.
+
+O que ainda precisa de staging/deploy real é uma troca efetiva entre **duas versões do service worker** com estado pendente, não a existência do mecanismo local de persistência.
+
+## 10. Drill de backup/restore
+
+Antes da primeira produção e periodicamente quando o formato mudar, siga:
+
+```text
+docs/runbooks/backup-restore-drill.md
+```
+
+O drill deve provar merge, replace-all, safety backup, mídia e round-trip de recuperação usando staging dedicado. Nunca usar produção para esse exercício.
+
+## 11. Promoção para produção
 
 Só depois de staging completamente verde:
 
@@ -169,12 +220,12 @@ Só depois de staging completamente verde:
 4. criar PowerSync produção apontando apenas ao Supabase produção;
 5. buildar Pages com endpoints públicos de produção e `RELEASE_ENV=production`;
 6. executar smoke não destrutivo no domínio final;
-7. conferir headers e service worker no domínio final;
+7. executar `verify:deployed` no domínio final;
 8. registrar SHA/tag da release e referências exatas de infraestrutura sem registrar secrets.
 
 Não rode import SSRF/destructive restore/account recovery contra dados reais como “smoke”.
 
-## 11. Rollback
+## 12. Rollback
 
 Frontend:
 
@@ -192,13 +243,20 @@ Storage/restore:
 - não apagar manualmente objetos de restore/promovidos durante incidente sem confirmar referências de metadata/conflitos;
 - usar o cleanup idempotente do fluxo já implementado.
 
-## 12. Evidência mínima por release
+Backend/sync:
+
+- se o problema for pausa/desprovisionamento, usar os runbooks de Supabase/PowerSync em vez de resetar clientes;
+- preservar filas locais e cooking draft antes de qualquer limpeza.
+
+## 13. Evidência mínima por release
 
 Registrar em `docs/RELEASE_STATUS.md` ou nota equivalente:
 
 - commit SHA candidato;
-- Node/pnpm usados;
+- Node/pnpm/Deno usados;
+- resultado real de `pnpm install --frozen-lockfile`;
 - resultado real de `pnpm verify:release`;
+- resultado real de `pnpm verify:deployed`;
 - resultado de migrations/Deno/SQL staging;
 - Project Refs de **Receitas** staging/produção (nunca secrets);
 - URLs públicas staging/produção;
