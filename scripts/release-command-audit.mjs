@@ -14,6 +14,7 @@ const REQUIRED_RELEASE_E2E = [
   'tests/e2e/media.spec.ts',
   'tests/e2e/planner-shopping.spec.ts',
   'tests/e2e/trash-restore.spec.ts',
+  'tests/e2e/conflicts.spec.ts',
 ]
 
 function command(scripts, name) {
