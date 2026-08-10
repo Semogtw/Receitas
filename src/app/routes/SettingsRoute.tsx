@@ -1,63 +1,77 @@
-import { AccountAdminScreen } from '../../features/auth/AccountAdminScreen'
-import { PairInviteForm } from '../../features/auth/PairInviteForm'
-import { useAuth } from '../../features/auth/AuthProvider'
+import { BackupPanel } from '../../features/backup/components/BackupPanel'
 import { CompleteBackupPanel } from '../../features/backup/components/CompleteBackupPanel'
 import { CompleteRestorePanel } from '../../features/backup/components/CompleteRestorePanel'
 import { ReplaceRestorePanel } from '../../features/backup/components/ReplaceRestorePanel'
+import { ConflictCenter } from '../../features/conflicts/ConflictCenter'
 import { DiagnosticsScreen } from '../../features/diagnostics/components/DiagnosticsScreen'
+import { AccountAdminScreen } from '../../features/auth/AccountAdminScreen'
+import { PairInviteForm } from '../../features/auth/PairInviteForm'
+import { useAuth } from '../../features/auth/AuthProvider'
 import { usePowerSyncDatabase } from '../../data/PowerSyncProvider'
 import { APP_VERSION } from '../../lib/app-version'
+import { TrashPanel } from '../../features/trash/TrashPanel'
 
 export function SettingsRoute() {
   const auth = useAuth()
   const database = usePowerSyncDatabase()
+  const canManagePair = Boolean(auth.userId && auth.pairId)
 
   return (
-    <section className="route-section settings-page" aria-labelledby="settings-title">
+    <section className="route-section" aria-labelledby="settings-title">
       <p className="route-kicker">Preferências</p>
       <h1 id="settings-title">Configurações</h1>
-      <p className="route-intro">Preferências do aplicativo, vínculo do par e opções desta sessão ficam aqui.</p>
-
-      <PairInviteForm />
-
-      {auth.pairId ? (
-        <>
-          {auth.userId ? (
-            <>
-              <CompleteBackupPanel
-                database={database}
-                pairId={auth.pairId}
-                actorUserId={auth.userId}
-                appVersion={APP_VERSION}
-              />
-              <CompleteRestorePanel database={database} />
-              <ReplaceRestorePanel
-                database={database}
-                pairId={auth.pairId}
-                actorUserId={auth.userId}
-                appVersion={APP_VERSION}
-              />
-              {auth.email ? (
-                <AccountAdminScreen
-                  database={database}
-                  pairId={auth.pairId}
-                  actorUserId={auth.userId}
-                  currentEmail={auth.email}
-                  appVersion={APP_VERSION}
-                />
-              ) : null}
-            </>
-          ) : null}
-          <DiagnosticsScreen database={database} pairId={auth.pairId} appVersion={APP_VERSION} />
-        </>
+      <p className="route-intro">
+        Ajustes do dispositivo, convites do par, lixeira, backup e recursos de recuperação ficam concentrados aqui.
+      </p>
+      {canManagePair ? <PairInviteForm /> : null}
+      {auth.userId && auth.pairId ? (
+        <TrashPanel
+          database={database}
+          pairId={auth.pairId}
+          actorUserId={auth.userId}
+        />
       ) : null}
-
-      <section className="settings-section" aria-labelledby="session-title">
-        <h2 id="session-title">Sessão</h2>
-        <p>{auth.email ? `Conectado como ${auth.email}.` : 'Sessão autenticada.'}</p>
-        {auth.restoredFromLocalScope ? <p>O caderno foi reaberto usando a autorização local validada anteriormente. Alterações remotas de conta serão confirmadas quando a conexão voltar.</p> : null}
-        <button className="button button--quiet" type="button" onClick={() => void auth.signOut()}>Sair neste dispositivo</button>
-      </section>
+      <BackupPanel />
+      {auth.userId && auth.pairId ? (
+        <CompleteBackupPanel
+          database={database}
+          pairId={auth.pairId}
+          actorUserId={auth.userId}
+          appVersion={APP_VERSION}
+        />
+      ) : null}
+      {auth.userId && auth.pairId ? (
+        <CompleteRestorePanel
+          database={database}
+          pairId={auth.pairId}
+          actorUserId={auth.userId}
+        />
+      ) : null}
+      {auth.userId && auth.pairId ? (
+        <ReplaceRestorePanel
+          database={database}
+          pairId={auth.pairId}
+          actorUserId={auth.userId}
+          appVersion={APP_VERSION}
+        />
+      ) : null}
+      <ConflictCenter />
+      <DiagnosticsScreen database={database} appVersion={APP_VERSION} />
+      {auth.userId && auth.pairId ? (
+        <details className="account-admin-shell">
+          <summary>Administração excepcional das duas contas</summary>
+          <AccountAdminScreen
+            database={database}
+            pairId={auth.pairId}
+            actorUserId={auth.userId}
+            appVersion={APP_VERSION}
+          />
+        </details>
+      ) : null}
+      <div className="settings-card">
+        <h2>Tema</h2>
+        <p>O app respeita o tema claro ou escuro do sistema.</p>
+      </div>
     </section>
   )
 }
