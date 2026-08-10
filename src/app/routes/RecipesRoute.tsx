@@ -3,6 +3,9 @@ import type { PowerSyncDatabase } from '@powersync/web'
 import { usePowerSyncDatabase } from '../../data/PowerSyncProvider'
 import { useAuth } from '../../features/auth/AuthProvider'
 import { CookingWorkspace } from '../../features/cooking/components/CookingWorkspace'
+import { OfflineRecipeAvailability } from '../../features/media/components/OfflineRecipeAvailability'
+import { RecipePhotosPanel } from '../../features/media/components/RecipePhotosPanel'
+import { createBrowserMediaRuntime } from '../../features/media/create-browser-media-runtime'
 import { RecipeDetail } from '../../features/recipes/components/RecipeDetail'
 import { RecipeEditor } from '../../features/recipes/components/RecipeEditor'
 import { CategoryRepository, type RecipeCategory } from '../../features/recipes/data/category-repository'
@@ -65,6 +68,11 @@ export function RecipesRoute() {
       search: new LocalRecipeSearch(database, auth.pairId),
     }
   }, [auth.userId, auth.pairId, database])
+
+  const mediaRuntime = useMemo(() => {
+    if (!auth.userId || !auth.pairId) return null
+    return createBrowserMediaRuntime(database, auth.userId)
+  }, [auth.pairId, auth.userId, database])
 
   const searchResults = useMemo(
     () => searchRecipeDocuments(searchDocuments, searchQuery),
@@ -289,6 +297,7 @@ export function RecipesRoute() {
           pairId={auth.pairId}
           actorUserId={auth.userId}
           recipe={selectedRecipe}
+          mediaRuntime={mediaRuntime ?? undefined}
           onExit={() => setMode('view')}
         />
       </section>
@@ -307,6 +316,23 @@ export function RecipesRoute() {
           onEdit={() => setMode('edit')}
           onDelete={() => setConfirmingDelete(true)}
         />
+        {mediaRuntime && auth.pairId && auth.userId ? (
+          <>
+            <OfflineRecipeAvailability
+              database={database}
+              pairId={auth.pairId}
+              recipeId={selectedRecipe.id}
+              runtime={mediaRuntime}
+            />
+            <RecipePhotosPanel
+              database={database}
+              pairId={auth.pairId}
+              actorUserId={auth.userId}
+              recipeId={selectedRecipe.id}
+              runtime={mediaRuntime}
+            />
+          </>
+        ) : null}
         {confirmingDelete ? (
           <div className="recipe-delete-confirmation" role="dialog" aria-modal="true" aria-labelledby="delete-recipe-title">
             <div>
