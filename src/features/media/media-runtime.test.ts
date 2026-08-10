@@ -106,14 +106,30 @@ describe('MediaRuntime', () => {
     expect(value.cache.getForUpload).toHaveBeenCalledWith(pendingJob)
   })
 
-  it('cancels a pending job by deleting its protected blob before removing the queue entry', async () => {
+  it('cancels a pending job durably before best-effort cache cleanup', async () => {
     const value = fixture({ jobs: [pendingJob] })
 
     await value.runtime.cancelUpload('photo-a')
 
-    expect(value.cache.deleteForUpload).toHaveBeenCalledWith(pendingJob)
     expect(value.queue.remove).toHaveBeenCalledWith('photo-a')
-    expect(value.cache.deleteForUpload.mock.invocationCallOrder[0]).toBeLessThan(value.queue.remove.mock.invocationCallOrder[0]!)
+    expect(value.cache.deleteForUpload).toHaveBeenCalledWith(pendingJob)
+    expect(value.queue.remove.mock.invocationCallOrder[0]).toBeLessThan(value.cache.deleteForUpload.mock.invocationCallOrder[0]!)
+  })
+
+  it('keeps cancellation successful if cache cleanup fails after the queue entry is removed', async () => {
+    const value = fixture({ jobs: [pendingJob] })
+    value.cache.deleteForUpload.mockRejectedValueOnce(new Error('cache unavailable'))
+
+    await expect(value.runtime.cancelUpload('photo-a')).resolves.toBeUndefined()
+    expect(value.queue.remove).toHaveBeenCalledWith('photo-a')
+  })
+
+  it('does not delete the blob if durable queue removal fails', async () => {
+    const value = fixture({ jobs: [pendingJob] })
+    value.queue.remove.mockRejectedValueOnce(new Error('database unavailable'))
+
+    await expect(value.runtime.cancelUpload('photo-a')).rejects.toThrow('database unavailable')
+    expect(value.cache.deleteForUpload).not.toHaveBeenCalled()
   })
 
   it('refuses to cancel a cross-pair job found in corrupted local queue state', async () => {
