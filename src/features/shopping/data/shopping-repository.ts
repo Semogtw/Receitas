@@ -207,6 +207,36 @@ export class ShoppingRepository {
     }
   }
 
+  async softDeleteShoppingList(id: string): Promise<void> {
+    const row = await this.activeRow('shopping_lists', id)
+    const remaining = await this.database.getAll<DatabaseRow>(
+      `SELECT * FROM shopping_lists
+       WHERE pair_id = ? AND deleted_at IS NULL AND id <> ?
+       ORDER BY is_default DESC, updated_at DESC, name COLLATE NOCASE ASC`,
+      [this.scope.pairId, id],
+    )
+
+    if (Boolean(row.is_default) && remaining.length > 0 && !remaining.some((candidate) => Boolean(candidate.is_default))) {
+      await this.updateRow('shopping_lists', remaining[0]!, {
+        is_default: 1,
+        updated_at: new Date().toISOString(),
+      })
+    }
+
+    const current = payloadFromRow(row)
+    const base = await resolveMutationBase(this.database, 'shopping_lists', id, current)
+    const now = new Date().toISOString()
+    await this.writeMutation(this.database, createMutationEnvelope({
+      pairId: this.scope.pairId,
+      actorUserId: this.scope.actorUserId,
+      entityType: 'shopping_lists',
+      entityId: id,
+      operation: 'soft_delete',
+      ...base,
+      next: { ...current, is_default: 0, deleted_at: now, updated_at: now },
+    }))
+  }
+
   async addItem(listId: string, draft: ShoppingItemDraft): Promise<string> {
     return this.addItemWithSources(listId, draft, [draft.source])
   }
