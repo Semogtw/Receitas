@@ -15,10 +15,11 @@ export function createBrowserMediaRuntime(
   scope: RecipeRepositoryScope,
 ): MediaRuntime {
   const client = getSupabaseClient()
-  const cache = new BrowserMediaBlobCache()
+  const cache = new BrowserMediaBlobCache(scope.pairId)
   const queue = new MediaUploadQueueStore(database)
 
   return new MediaRuntime({
+    pairId: scope.pairId,
     cache,
     queue,
     storage: new SupabaseMediaStorage(client, MEDIA_STORAGE_BUCKET),
