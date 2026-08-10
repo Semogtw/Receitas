@@ -6,6 +6,7 @@ import { CookingWorkspace } from '../../features/cooking/components/CookingWorks
 import { OfflineRecipeAvailability } from '../../features/media/components/OfflineRecipeAvailability'
 import { RecipePhotosPanel } from '../../features/media/components/RecipePhotosPanel'
 import { createBrowserMediaRuntime } from '../../features/media/create-browser-media-runtime'
+import { useMediaUploadSync } from '../../features/media/use-media-upload-sync'
 import { RecipeDetail } from '../../features/recipes/components/RecipeDetail'
 import { RecipeEditor } from '../../features/recipes/components/RecipeEditor'
 import { CategoryRepository, type RecipeCategory } from '../../features/recipes/data/category-repository'
@@ -71,8 +72,13 @@ export function RecipesRoute() {
 
   const mediaRuntime = useMemo(() => {
     if (!auth.userId || !auth.pairId) return null
-    return createBrowserMediaRuntime(database, auth.userId)
+    return createBrowserMediaRuntime(database, {
+      pairId: auth.pairId,
+      actorUserId: auth.userId,
+    })
   }, [auth.pairId, auth.userId, database])
+
+  useMediaUploadSync(mediaRuntime)
 
   const searchResults = useMemo(
     () => searchRecipeDocuments(searchDocuments, searchQuery),
