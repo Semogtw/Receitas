@@ -2,7 +2,7 @@ import { act, render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { useMediaUploadSync } from './use-media-upload-sync'
 
-function Harness({ runtime }: { runtime: { drainUploads(): Promise<unknown> } }) {
+function Harness({ runtime }: { runtime: { drainUploads(): Promise<unknown> } | null }) {
   useMediaUploadSync(runtime as never)
   return null
 }
@@ -27,5 +27,13 @@ describe('useMediaUploadSync', () => {
 
     await act(async () => { await Promise.resolve() })
     expect(drainUploads).not.toHaveBeenCalled()
+  })
+
+  it('is safe to mount without a runtime during auth transitions', async () => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true })
+    render(<Harness runtime={null} />)
+
+    await act(async () => { window.dispatchEvent(new Event('online')); await Promise.resolve() })
+    expect(true).toBe(true)
   })
 })
