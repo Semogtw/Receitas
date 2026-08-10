@@ -9,6 +9,7 @@ interface MediaRuntimeCache {
   put(mediaId: string, blob: Blob): Promise<void>
   get(mediaId: string): Promise<Blob | null>
   getForUpload(job: MediaUploadJob): Promise<Blob | null>
+  deleteForUpload(job: MediaUploadJob): Promise<boolean>
   delete(mediaId: string): Promise<boolean>
 }
 
@@ -81,6 +82,19 @@ export class MediaRuntime {
 
   async getPendingBlob(job: MediaUploadJob): Promise<Blob | null> {
     return this.dependencies.cache.getForUpload(job)
+  }
+
+  async cancelUpload(mediaId: string): Promise<void> {
+    const jobs = await this.dependencies.queue.load()
+    const job = jobs.find((candidate) => candidate.id === mediaId)
+    if (!job) return
+    if (job.state === 'uploading') throw new Error('Cannot cancel an upload while it is being sent')
+    if (job.pairId !== this.dependencies.pairId) {
+      throw new Error('Media upload job does not belong to the active pair')
+    }
+
+    await this.dependencies.cache.deleteForUpload(job)
+    await this.dependencies.queue.remove(job.id)
   }
 
   async drainUploads(): Promise<MediaUploadDrainResult> {
