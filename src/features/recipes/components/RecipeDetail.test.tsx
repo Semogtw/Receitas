@@ -51,16 +51,19 @@ describe('RecipeDetail', () => {
     expect(screen.getByText('a gosto Canela')).toBeInTheDocument()
   })
 
-  it('supports an exact target serving count and exposes edit/delete actions', async () => {
+  it('supports an exact target serving count and exposes cook/edit/delete actions', async () => {
     const user = userEvent.setup()
+    const onCook = vi.fn()
     const onEdit = vi.fn()
     const onDelete = vi.fn()
-    render(<RecipeDetail recipe={recipe} onEdit={onEdit} onDelete={onDelete} />)
+    render(<RecipeDetail recipe={recipe} onCook={onCook} onEdit={onEdit} onDelete={onDelete} />)
 
     await user.clear(screen.getByLabelText('Porções desejadas'))
     await user.type(screen.getByLabelText('Porções desejadas'), '6')
     expect(screen.getByText('2 1/4 xícara Farinha')).toBeInTheDocument()
 
+    await user.click(screen.getByRole('button', { name: 'Cozinhar agora' }))
+    expect(onCook).toHaveBeenCalledTimes(1)
     await user.click(screen.getByRole('button', { name: 'Editar receita' }))
     expect(onEdit).toHaveBeenCalledTimes(1)
     await user.click(screen.getByRole('button', { name: 'Mover para a lixeira' }))
