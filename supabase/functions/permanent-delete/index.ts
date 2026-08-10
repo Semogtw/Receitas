@@ -61,6 +61,15 @@ async function activePairId(client: ServerClient, userId: string): Promise<strin
   return data[0].pair_id
 }
 
+async function readCleanupQueue(client: ServerClient, pairId: string, limit: number) {
+  const { data, error } = await client.rpc('read_media_delete_queue_server', {
+    p_pair_id: pairId,
+    p_limit: limit,
+  })
+  if (error) throw new Error('media_delete_queue_read_failed')
+  return Array.isArray(data) ? data : []
+}
+
 async function markCleanupFailure(
   client: ServerClient,
   pairId: string,
@@ -79,14 +88,7 @@ export async function cleanupPendingMediaDeletes(
   client: ServerClient,
   pairId: string,
 ): Promise<{ attempted: number; remaining: number }> {
-  const { data, error } = await client.rpc('read_media_delete_queue_server', {
-    p_pair_id: pairId,
-    p_limit: 20,
-  })
-  if (error) throw new Error('media_delete_queue_read_failed')
-
-  const rows = Array.isArray(data) ? data : []
-  let completed = 0
+  const rows = await readCleanupQueue(client, pairId, 20)
 
   for (const row of rows) {
     const storagePath = row && typeof row === 'object' && typeof row.storage_path === 'string'
@@ -110,10 +112,13 @@ export async function cleanupPendingMediaDeletes(
       p_storage_path: storagePath,
     })
     if (markError) throw new Error('media_delete_queue_complete_failed')
-    completed += 1
   }
 
-  return { attempted: rows.length, remaining: rows.length - completed }
+  // Do not expose paths/counts from the private queue. A second bounded read is
+  // enough to tell the client whether another retry is still useful, including
+  // the case where more than one batch was queued.
+  const remainingRows = await readCleanupQueue(client, pairId, 1)
+  return { attempted: rows.length, remaining: remainingRows.length > 0 ? 1 : 0 }
 }
 
 function knownErrorStatus(message: string): number | null {
@@ -135,9 +140,14 @@ export function createPermanentDeleteHandler(dependencies: PermanentDeleteDepend
 
     try {
       const body = await readJsonObject(request)
-      const { entityType, entityId } = parsePermanentDeleteRequest(body)
       const pairId = await activePairId(client, userId)
 
+      if (body.action === 'cleanup') {
+        const cleanup = await cleanupPendingMediaDeletes(client, pairId)
+        return jsonResponse(request, { ok: true, cleanupPending: cleanup.remaining > 0 })
+      }
+
+      const { entityType, entityId } = parsePermanentDeleteRequest(body)
       const { error } = await client.rpc('permanently_delete_entity_server', {
         p_actor_user_id: userId,
         p_entity_type: entityType,
