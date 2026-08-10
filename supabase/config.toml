@@ -54,3 +54,6 @@ verify_jwt = true
 
 [functions.account-admin]
 verify_jwt = true
+
+[functions.permanent-delete]
+verify_jwt = true
