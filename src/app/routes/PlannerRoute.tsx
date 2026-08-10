@@ -116,6 +116,12 @@ export function PlannerRoute() {
     await refresh()
   }
 
+  async function deletePeriod(id: string) {
+    if (!repositories) return
+    await repositories.planner.softDeleteMealPeriod(id)
+    await refresh()
+  }
+
   if (!repositories) {
     return (
       <section className="route-section" aria-labelledby="planner-title">
@@ -161,6 +167,7 @@ export function PlannerRoute() {
           onCreate={createPeriod}
           onRename={renamePeriod}
           onReorder={reorderPeriods}
+          onDelete={deletePeriod}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}
