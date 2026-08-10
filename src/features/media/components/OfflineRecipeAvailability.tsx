@@ -60,6 +60,8 @@ export function OfflineRecipeAvailability({ database, pairId, recipeId, runtime 
         setStatus(result)
         if ('failed' in result && result.failed > 0) {
           setError('Parte das fotos ainda não pôde ser baixada. O app tentará novamente quando a conexão ou os dados mudarem.')
+        } else {
+          setError(null)
         }
       } while (reconcileAgainRef.current && !manualOperationRef.current)
     } catch {
