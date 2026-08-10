@@ -2,6 +2,11 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+function ordinaryGetBody(cacheSource) {
+  const match = cacheSource.match(/async get\(mediaId:[^{]+\{([\s\S]*?)\n\s*}\n\n\s*async getForUpload/)
+  return match?.[1] ?? ''
+}
+
 export function inspectMediaSessionIsolation({ cacheSource, factorySource, ownerPanelSource, recipePanelSource, authSource, logoutPolicySource }) {
   const findings = []
 
@@ -11,7 +16,10 @@ export function inspectMediaSessionIsolation({ cacheSource, factorySource, owner
   if (!cacheSource.includes('job.pairId !== this.pairId')) {
     findings.push('legacy pending-media access must validate the durable job pair')
   }
-  if (cacheSource.includes('async get(mediaId') && /legacyCacheRequest[\s\S]*async get\(mediaId/.test(cacheSource)) {
+  const getBody = ordinaryGetBody(cacheSource)
+  if (!getBody) {
+    findings.push('browser media cache ordinary get() implementation could not be verified')
+  } else if (getBody.includes('legacyCacheRequest')) {
     findings.push('ordinary synced-media reads must not fall back to the legacy unscoped cache')
   }
 
