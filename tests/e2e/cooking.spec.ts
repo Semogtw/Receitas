@@ -27,20 +27,17 @@ test('starts and finishes a cooking session from recipe detail', async ({ page }
   await page.getByRole('button', { name: 'Cozinhar agora' }).click()
   await expect(page.getByText('Misture os ingredientes até ficar uniforme.')).toBeVisible()
 
-  const start = page.getByRole('button', { name: 'Começar preparo' })
-  if (await start.count()) await start.click()
-
-  const finishStep = page.getByRole('button', { name: /Finalizar preparo/i })
+  const finishStep = page.getByRole('button', { name: 'Finalizar preparo' })
   await expect(finishStep).toBeVisible()
   await finishStep.click()
 
-  await expect(page.getByRole('button', { name: 'Encerrar e registrar' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Como ficou desta vez?' })).toBeVisible()
   const observation = page.getByLabel('Observação compartilhada')
-  if (await observation.count()) await observation.fill('Fixture E2E sem conteúdo pessoal.')
-  await page.getByRole('button', { name: 'Encerrar e registrar' }).click()
+  await observation.fill('Fixture E2E sem conteúdo pessoal.')
+  await page.getByRole('button', { name: 'Finalizar preparo' }).click()
 
   await expect(page.getByRole('heading', { name: 'Histórico atualizado' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: /Fotos.*preparo/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Registro visual' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Voltar à receita' }).click()
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
