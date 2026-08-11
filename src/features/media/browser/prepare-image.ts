@@ -6,6 +6,19 @@ import {
   type ImagePreparationPolicy,
 } from '../domain/image-preparation'
 
+export const MAX_SOURCE_IMAGE_BYTES = 32 * 1024 * 1024
+export const MAX_PREPARED_IMAGE_BYTES = 20 * 1024 * 1024
+
+const SUPPORTED_SOURCE_IMAGE_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/avif',
+  'image/gif',
+  'image/heic',
+  'image/heif',
+])
+
 export interface DecodedImage {
   source: CanvasImageSource
   width: number
@@ -69,12 +82,26 @@ const defaultRuntime: ImagePreparationRuntime = {
   encode: defaultEncode,
 }
 
+function encodedBlobMatches(blob: Blob | null, expectedMimeType: 'image/webp' | 'image/jpeg'): blob is Blob {
+  return Boolean(
+    blob
+    && blob.size > 0
+    && blob.size <= MAX_PREPARED_IMAGE_BYTES
+    && blob.type.toLowerCase() === expectedMimeType,
+  )
+}
+
 export async function prepareImageForUpload(
   file: Blob,
   policy: ImagePreparationPolicy = DEFAULT_IMAGE_PREPARATION,
   runtime: ImagePreparationRuntime = defaultRuntime,
 ): Promise<PreparedImage> {
-  if (!file.type.startsWith('image/')) throw new Error('Only image files can be prepared as recipe media')
+  const sourceType = file.type.toLowerCase()
+  if (!SUPPORTED_SOURCE_IMAGE_TYPES.has(sourceType)) {
+    throw new Error('Unsupported source image type')
+  }
+  if (file.size <= 0) throw new Error('Source image is empty')
+  if (file.size > MAX_SOURCE_IMAGE_BYTES) throw new Error('Source image exceeds the local preparation size limit')
   if (!Number.isFinite(policy.quality) || policy.quality <= 0 || policy.quality > 1) {
     throw new Error('Image encoding quality must be greater than zero and at most one')
   }
@@ -83,7 +110,7 @@ export async function prepareImageForUpload(
   try {
     const dimensions = fitImageWithinBounds(decoded.width, decoded.height, policy.maxLongEdge)
     const preferred = await runtime.encode(decoded.source, dimensions, policy.mimeType, policy.quality)
-    if (preferred) {
+    if (encodedBlobMatches(preferred, policy.mimeType)) {
       const mimeType = policy.mimeType
       return {
         blob: preferred,
@@ -95,7 +122,7 @@ export async function prepareImageForUpload(
 
     if (policy.mimeType !== 'image/jpeg') {
       const fallback = await runtime.encode(decoded.source, dimensions, 'image/jpeg', policy.quality)
-      if (fallback) {
+      if (encodedBlobMatches(fallback, 'image/jpeg')) {
         return {
           blob: fallback,
           ...dimensions,
@@ -105,7 +132,7 @@ export async function prepareImageForUpload(
       }
     }
 
-    throw new Error('The browser could not encode the prepared image')
+    throw new Error('The browser could not encode a bounded image in the requested format')
   } finally {
     decoded.close()
   }
