@@ -40,6 +40,7 @@ export function inspectReleaseCommands(packageJson) {
   }
   if (!verifyRelease.includes('pnpm verify') || !verifyRelease.includes('pnpm test:e2e:release')) findings.push('verify:release must compose verify and the authenticated release E2E suite')
   if (!deployed.includes('tests/e2e/deployed-security.spec.ts')) findings.push('test:e2e:deployed must keep origin security/deep-link checks')
+  if (!deployed.includes('--config playwright.deployed.config.ts')) findings.push('test:e2e:deployed must use the deployed-only Playwright config without a local preview server')
 
   return findings
 }
