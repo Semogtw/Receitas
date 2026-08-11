@@ -51,6 +51,22 @@ describe('diagnostic event sanitization', () => {
     })
   })
 
+  it('redacts URLs, stable ids and local user paths even through allowlisted keys', () => {
+    expect(sanitizeDiagnosticContext({
+      operation: 'GET https://private.example.test/recipes/secret',
+      buildId: '10000000-0000-4000-8000-000000000001',
+      errorCode: 'failed /home/arthur/private/file.json',
+      phase: String.raw`read C:\Users\Arthur\private.json`,
+      syncStatus: 'retrying',
+    })).toEqual({
+      operation: '[redacted]',
+      buildId: '[redacted]',
+      errorCode: '[redacted]',
+      phase: '[redacted]',
+      syncStatus: 'retrying',
+    })
+  })
+
   it('normalizes code and creates only validated event shapes', () => {
     const event = createDiagnosticEvent({
       area: 'sync',
@@ -81,6 +97,14 @@ describe('diagnostic event sanitization', () => {
       code: 'ok',
       severity: 'info',
       technicalContext: { payload: 'private' },
+    })).toBe(false)
+    expect(isDiagnosticEvent({
+      id: 'x',
+      timestamp: '2026-08-09T10:00:00.000Z',
+      area: 'sync',
+      code: 'ok',
+      severity: 'info',
+      technicalContext: { operation: 'https://private.example.test' },
     })).toBe(false)
   })
 })
