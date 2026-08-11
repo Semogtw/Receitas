@@ -23,7 +23,16 @@ const THEMES = `
 `
 const BASE = `
 :focus-visible { outline: 0.1875rem solid currentColor; }
-@media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms; } }
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 `
 const DIALOG = `
 const dialogRef = useModalDialog<HTMLDivElement>(onClose)
@@ -58,6 +67,24 @@ test('rejects undersized tap target and invisible keyboard focus', () => {
   assert(findings.some((finding) => finding.includes('44px')))
   assert(findings.some((finding) => finding.includes('keyboard focus')))
   assert(findings.some((finding) => finding.includes('reduced-motion')))
+})
+
+test('rejects incomplete reduced-motion overrides', () => {
+  const findings = inspectAccessibilitySources({
+    ...safeInput(),
+    base: `
+      :focus-visible { outline: 0.1875rem solid currentColor; }
+      @media (prefers-reduced-motion: reduce) {
+        * { animation-duration: 1s !important; }
+      }
+    `,
+  })
+
+  assert(findings.some((finding) => finding.includes('pseudo-elements')))
+  assert(findings.some((finding) => finding.includes('smooth scrolling')))
+  assert(findings.some((finding) => finding.includes('animation loops')))
+  assert(findings.some((finding) => finding.includes('animation duration')))
+  assert(findings.some((finding) => finding.includes('transition duration')))
 })
 
 test('rejects insufficient text contrast in either theme', () => {
