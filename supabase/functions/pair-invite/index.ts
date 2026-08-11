@@ -81,6 +81,9 @@ Deno.serve(async (request) => {
     if (error instanceof Error && error.message === 'authentication_required') {
       return jsonResponse(request, { error: 'Autenticação obrigatória.', code: 'authentication_required' }, 401)
     }
+    if (error instanceof Error && error.message === 'request_body_too_large') {
+      return jsonResponse(request, { error: 'Corpo da requisição muito grande.', code: 'request_body_too_large' }, 413)
+    }
     if (error instanceof SyntaxError || (error instanceof Error && error.message === 'invalid_json_object')) {
       return jsonResponse(request, { error: 'Corpo JSON inválido.', code: 'invalid_json' }, 400)
     }
