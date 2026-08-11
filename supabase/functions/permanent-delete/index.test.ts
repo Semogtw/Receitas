@@ -126,11 +126,12 @@ Deno.test('cleanup action retries the private queue without exposing paths', asy
   assert(!JSON.stringify(body).includes('storage_path'), 'private cleanup paths must not be returned')
 })
 
-Deno.test('cleanup queue keeps a failed Storage removal retryable', async () => {
-  const calls: string[] = []
+Deno.test('cleanup queue keeps a failed Storage removal retryable without persisting provider details', async () => {
+  const calls: Array<{ name: string; args?: Record<string, unknown> }> = []
+  const providerMessage = 'temporary storage error https://private.example.test/path?token=secret'
   const client = {
-    rpc: async (name: string) => {
-      calls.push(name)
+    rpc: async (name: string, args?: Record<string, unknown>) => {
+      calls.push({ name, args })
       if (name === 'read_media_delete_queue_server') {
         return { data: [{ storage_path: 'pairs/pair-a/recipes/recipe-a/photo.webp' }], error: null }
       }
@@ -140,7 +141,7 @@ Deno.test('cleanup queue keeps a failed Storage removal retryable', async () => 
     },
     storage: {
       from: () => ({
-        remove: async () => ({ data: null, error: { message: 'temporary storage error' } }),
+        remove: async () => ({ data: null, error: { message: providerMessage } }),
       }),
     },
   }
@@ -151,6 +152,9 @@ Deno.test('cleanup queue keeps a failed Storage removal retryable', async () => 
   )
 
   assertEquals(result, { attempted: 1, remaining: 1 })
-  assert(calls.includes('mark_media_delete_failed_server'))
-  assert(!calls.includes('mark_media_delete_complete_server'))
+  const failedCall = calls.find((call) => call.name === 'mark_media_delete_failed_server')
+  assert(failedCall, 'failed cleanup must remain retryable in the private queue')
+  assertEquals(failedCall.args?.p_error, 'storage_delete_failed')
+  assert(!JSON.stringify(failedCall.args).includes(providerMessage), 'provider message must not be persisted')
+  assert(!calls.some((call) => call.name === 'mark_media_delete_complete_server'))
 })
