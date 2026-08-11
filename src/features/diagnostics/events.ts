@@ -62,6 +62,10 @@ const SENSITIVE_STRING_PATTERNS = [
   /\b(?:sk|sb|eyJ)[-_A-Za-z0-9.]{16,}\b/,
   /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
   /(?:^|[?&])(?:token|key|secret|code|auth)=/i,
+  /\b(?:https?|wss?|file):\/\//i,
+  /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i,
+  /\b[A-Za-z]:\\(?:Users|Documents and Settings)\\/i,
+  /(?:^|\s)\/(?:home|Users)\/[A-Za-z0-9._-]+\//,
   /data:image\//i,
 ]
 
