@@ -1,190 +1,107 @@
 # Status do desenvolvimento
 
-**Atualizado em:** 2026-08-08  
-**Fase atual:** implementação inline em andamento. Planos 01–05 estão estruturalmente implementados em branches dependentes; gates executáveis que exigem um runner seguro continuam pendentes e não são tratados como sucesso.
+**Atualizado em:** 2026-08-11  
+**Branch de trabalho:** `feat/hardening-deploy-release`  
+**Fase atual:** plano 07 — hardening, deploy e release. Os planos funcionais anteriores estão integrados nesta linha; o trabalho atual é transformar a implementação em uma release reproduzível, testada e operável sem custo recorrente obrigatório.
 
-## Gates de processo concluídos
+> Para evidência detalhada de gates e bloqueios de release, `docs/RELEASE_STATUS.md` é o source of truth. Este arquivo existe para orientar a retomada do desenvolvimento, não para substituir o registro de evidências.
 
-- A especificação final de design em `docs/superpowers/specs/2026-08-07-receitas-design.md` foi explicitamente aprovada pelo usuário em 2026-08-07.
-- A fase `superpowers:writing-plans` foi concluída.
-- O usuário escolheu **Inline Execution** (`superpowers:executing-plans`).
-- A implementação permanece fora de `main`, em branches dependentes, com commits/pushes frequentes.
-- Bloqueio ambiental ou de infraestrutura é documentado e o trabalho resolvível por código continua.
+## Linha integrada
 
-## Linha de implementação
+A implementação foi construída em branches dependentes e a branch atual contém a sequência funcional completa:
 
-1. `feat/foundation-pwa` — plano 01, foundation PWA;
-2. `feat/backend-auth-data` — plano 02, backend/auth/dados;
-3. `feat/local-first-sync` — plano 03, sync local-first e conflitos;
-4. `feat/recipes-cooking-media` — plano 04, receitas/preparo/mídia;
-5. `feat/planning-shopping-search` — plano 05, planner/compras/busca local; branch atual deste checkpoint.
+1. `feat/foundation-pwa` — foundation PWA;
+2. `feat/backend-auth-data` — backend, autenticação e dados;
+3. `feat/local-first-sync` — PowerSync local-first e conflitos;
+4. `feat/recipes-cooking-media` — receitas, preparo e mídia;
+5. `feat/planning-shopping-search` — planner, compras e busca local;
+6. `feat/import-backup-diagnostics` — importação, backup/restore e diagnósticos;
+7. `feat/hardening-deploy-release` — hardening/release, **branch atual**.
 
-A próxima branch deve ser criada sobre o head do plano 05 para executar o plano 06 (`import-backup-diagnostics`).
+Não criar uma nova branch de plano sobre um head antigo. Novos trabalhos de release devem partir do head atual de `feat/hardening-deploy-release` até essa linha estar pronta para integração.
 
-## Plano 01 — Foundation PWA
-
-Estruturalmente implementado:
-
-- React + TypeScript + Vite;
-- shell mobile-first e rotas principais;
-- tokens visuais, claro/escuro e base de acessibilidade;
-- `vite-plugin-pwa` sem runtime cache privado;
-- Playwright preparado para Chromium/WebKit desktop e mobile;
-- smoke de navegação/reload offline escrito.
-
-Gates executáveis permanecem pendentes.
-
-## Plano 02 — Backend, Auth e dados
+## Estado funcional
 
 Estruturalmente implementado:
 
-- Supabase browser somente com configuração pública;
-- signup público e login anônimo desativados;
-- confirmação de e-mail obrigatória;
-- bootstrap único servidor e convite seguro para a segunda pessoa;
-- exatamente duas vagas atuais por par;
-- RLS, integridade cross-pair e autoria histórica;
-- recuperação de senha e estados públicos/privados de autenticação;
-- Storage privado pair-scoped;
-- schema para receitas, histórico, planejamento, compras, sync e conflitos.
+- PWA React/TypeScript/Vite mobile-first;
+- autenticação privada para exatamente duas pessoas;
+- banco e Storage pair-scoped com RLS/contratos de integridade;
+- PowerSync local-first, outbox semântica, reconexão e conflitos explícitos;
+- receitas, categorias, ingredientes, etapas e favoritos;
+- modo de preparo, timers, avaliações, histórico e fotos;
+- planner semanal e listas de compras;
+- busca local e filtros;
+- importação por arquivo/URL com revisão;
+- backup completo, merge restore, replace-all com safety backup;
+- lixeira/restore e diagnósticos;
+- runbooks operacionais e hardening de Cloudflare Pages.
 
-Decisão normativa: `docs/decisions/2026-08-07-supabase-invitation-auth-lifecycle.md`.
+## Release hardening em andamento
 
-As migrations atuais vão de `0001_core_identity.sql` a `0015_media_storage.sql`. O contrato semântico de mutações está em `0012_semantic_mutations.sql`.
+Já existe cobertura escrita para os principais journeys de release, incluindo offline recovery, restore destrutivo, conflitos, mídia, planner/compras, acessibilidade/layout e validação do origin implantado.
 
-Provisionamento de projeto Supabase real, migrations aplicadas, pgTAP/RLS e Advisors continuam pendentes.
+Em 2026-08-11 foi fechado um gap explícito do plano 07:
 
-## Plano 03 — Local-first sync
+- `PwaLifecycle` agora chama `updateServiceWorker(true)` somente após ação explícita do usuário;
+- `tests/e2e/pwa-update.spec.ts` foi adicionado;
+- o gate cria estado local offline, espera uma **build realmente nova no mesmo origin**, comprova mudança do `sw.js` por SHA-256, aceita o update e verifica que os dados locais persistem;
+- o gate real exige `E2E_PWA_UPDATE=1`; sem esse opt-in ele pula e **não** pode ser declarado como verde;
+- `release-command-audit.mjs` impede que o spec seja removido silenciosamente do grafo de release;
+- o procedimento está em `tests/e2e/README.md`.
 
-Estruturalmente implementado na branch `feat/local-first-sync`:
+A troca real entre duas versões ainda depende de staging Cloudflare/Supabase/PowerSync e continua pendente até execução coordenada.
 
-- schema local PowerSync;
-- mutation outbox semântica;
-- coalescência de mutações pendentes;
-- upload por `apply_client_mutation`;
-- conflitos preservados em vez de sobrescritos silenciosamente;
-- retry/diagnóstico de upload;
-- contrato de resolução e delete permanente em migrations posteriores;
-- escrita local primeiro e sincronização quando a conexão retorna.
+## Reprodutibilidade / lockfile
 
-Checkpoint: `docs/superpowers/checkpoints/2026-08-07-local-first-sync.md`.
+`pnpm-lock.yaml` continua sendo o principal bloqueio puramente reprodutível antes de um clean-machine gate fail-closed:
 
-Observação: esse checkpoint contém referências históricas a nomes/numeração de migrations que mudaram durante a evolução da branch. O source of truth atual é `supabase/migrations/`, em especial `0012_semantic_mutations.sql` para o RPC semântico.
+- o `Offline-Toolchains` gerou um lockfile determinístico para o manifesto atual da branch-base de hardening;
+- o artifact criptografado foi recuperado e validado nesta sessão;
+- SHA-256 observado do plaintext: `a20f2359e5eb93aced4660a7542ecc79a514a1573847ac0ee1e8e821f92e3e7a`;
+- a tentativa de um handoff que gerasse **somente** `pnpm-lock.yaml`, comprovasse que era a única mudança e fizesse push com `--force-with-lease` chegou até o commit local, mas o `PRIVATE_REPOSITORIES_TOKEN` do toolchain é deliberadamente read-only e o push foi recusado com HTTP 403;
+- não ampliar a permissão desse token apenas para contornar o bloqueio;
+- até o lockfile estar versionado, `pnpm install --frozen-lockfile` não pode ser declarado verde.
 
-## Plano 04 — Receitas, preparo e mídia
+Esse bloqueio não impede continuar melhorias de código/testes/documentação que não alterem dependências.
 
-Estruturalmente implementado na branch `feat/recipes-cooking-media`:
+## Gates executáveis
 
-- repositório e editor local-first de receitas;
-- ingredientes, etapas e categorias;
-- quantidades racionais/textuais e escalonamento;
-- perfis de conversão conservadores;
-- detalhe e modo de preparo;
-- sessões de preparo, avaliações e fotos;
-- fluxo de mídia privado coerente com o Storage do par.
+Use `Semogtw/Offline-Toolchains` sempre que Actions ou checkout forem necessários. O toolchain deve continuar:
 
-Progresso detalhado: `docs/superpowers/progress/2026-08-07-recipes-cooking-media.md`.
+- fixando o SHA exato do `Receitas`;
+- fazendo checkout sem persistir credenciais;
+- não recebendo credenciais reais de Supabase/PowerSync/E2E para gates públicos;
+- executando gates independentes mesmo quando um deles falha, para maximizar descoberta;
+- sanitizando sumários/logs e descartando source/build/local DB ao final.
 
-## Plano 05 — Planejamento, compras e busca local
+Nunca transformar um gate não executado, pulado ou bloqueado por ambiente em `PASS`.
 
-Estruturalmente implementado na branch `feat/planning-shopping-search`.
+## Infraestrutura ainda pendente
 
-### Planner
+Antes de produção ainda faltam, no mínimo:
 
-- períodos de refeição definidos pelo próprio par;
-- agenda semanal date-only, sem conversão indevida de fuso;
-- horário local opcional;
-- porções racionais e observações;
-- criação, edição e soft delete local-first;
-- entradas antigas sem período continuam visíveis em `Sem período`;
-- nenhuma infraestrutura de lembrete/notificação foi adicionada.
+- versionar `pnpm-lock.yaml` e repetir instalação frozen;
+- provisionar/configurar o Supabase **do Receitas** em staging e aplicar migrations/pgTAP/RLS/Edge Functions;
+- provisionar PowerSync staging e provar isolamento/reconexão;
+- implantar Cloudflare Pages staging e validar headers/deep links/offline no origin real;
+- executar o gate coordenado de atualização PWA entre duas builds no mesmo origin;
+- executar Playwright autenticado da release em browsers suportados;
+- QA em Safari/iOS real para o que não é fielmente provado por emulação;
+- drill de backup/restore e rollback em staging;
+- executar/triagear o security review final, com high/critical validados bloqueando a release.
 
-### Compras
-
-- múltiplas listas nomeadas;
-- uma única lista padrão ativa por par;
-- itens manuais, editáveis, marcáveis e removíveis;
-- geração por receitas ou intervalo do planner;
-- escala por porções antes da consolidação;
-- prévia editável antes de persistir;
-- proveniência completa preservada em itens consolidados;
-- quantidades textuais não são somadas automaticamente;
-- massa↔volume só cruza com perfil de densidade conhecido;
-- overrides do par têm precedência sobre catálogo padrão curado.
-
-### Busca local
-
-- busca em dados canônicos locais, sem request remoto por tecla;
-- título, descrição, ingredientes, categorias e observações;
-- comparação case/accent-insensitive em português;
-- filtros por categoria, favorita, `Queremos fazer` e `Já fizemos`;
-- múltiplas categorias selecionadas são conjuntivas;
-- ordenação por recente, nome, mais preparada e melhor avaliada;
-- ausência de avaliação permanece `null`, nunca nota zero.
-
-### Revisão do sync
-
-O caminho `repository → mutation_outbox → PowerSyncConnector → apply_client_mutation` foi revisado estaticamente.
-
-`0012_semantic_mutations.sql` já aceita planner e shopping. A revisão detectou e corrigiu métodos de restauração que tentavam limpar `deleted_at` via `update`, operação proibida pelo contrato servidor. Edição de item/entrada deletada ou ausente agora falha sem enfileirar mutação inválida.
-
-Progresso detalhado: `docs/superpowers/progress/2026-08-08-planning-shopping-search.md`.
-
-## Testes escritos, ainda não executados neste ambiente
-
-A base contém cobertura Vitest/Testing Library/SQL/Deno/Playwright para as áreas implementadas, incluindo novos testes de planner, compras, consolidação, proveniência e busca local.
-
-Não foram declarados como verdes nesta sessão:
-
-- `pnpm typecheck`;
-- `pnpm test:run`;
-- `pnpm build`;
-- `pnpm test:e2e:smoke`;
-- Playwright cross-browser/rendered QA;
-- pgTAP/RLS em Supabase real;
-- testes/deploy de Edge Functions em projeto hospedado.
-
-## Bloqueios ambientais e de segurança conhecidos
-
-### Runner Node / Actions
-
-O histórico do runner desta linha de trabalho não conseguiu instalar dependências de `registry.npmjs.org`, e o projeto exige usar o repositório de toolchains para Actions/checkout quando necessário.
-
-O toolchain disponível, `Semogtw/Offline-Toolchains`, é público. Executar nele checkout/testes de `Semogtw/Receitas` (privado) pode expor nomes de arquivos, stack traces ou trechos de fonte privada em logs públicos. Por isso não foi criado um workflow inseguro apenas para obter um gate verde.
-
-É necessário um runner/toolchain privado ou outro caminho que mantenha os logs privados para executar os gates completos com segurança.
-
-### Playwright autenticado
-
-O smoke atual pressupõe acesso às rotas protegidas, mas ainda não há fixture E2E autenticada autocontida/segura no repositório. E2E planner→compras→offline→reconexão e busca offline precisa dessa fixture antes de virar gate confiável.
-
-### Supabase real
-
-Ainda permanecem pendentes:
-
-- aplicar migrations num projeto Supabase real;
-- executar pgTAP/RLS de verdade;
-- executar testes/deploy de Edge Functions;
-- configurar password minimum/redirects/origins finais;
-- gerar tipos `Database` a partir do schema realmente aplicado;
-- rodar Advisors/security checks do projeto hospedado.
-
-Nenhum projeto pago deve ser criado automaticamente. Custo recorrente obrigatório continua **US$ 0**.
-
-## Próximos planos
-
-1. planos 01–05 — estruturalmente implementados; gates executáveis pendentes;
-2. `2026-08-07-06-import-backup-diagnostics.md` — próximo em execução;
-3. `2026-08-07-07-hardening-deploy-release.md` — depois do plano 06.
+Produção não deve ser promovida antes desses gates de staging.
 
 ## Método de execução
 
-- `superpowers:executing-plans` inline;
-- branch dependente por grande plano enquanto `main` permanece intacta;
-- TDD e gates definidos nos planos;
-- commits/pushes frequentes;
-- bloqueio ambiental é documentado e não impede trabalho resolvível por código;
-- @Context7 para APIs atuais, @Supericons para iconografia, @Build Web Apps/Playwright para QA quando disponíveis, metodologia Codex Security nas superfícies sensíveis.
+- continuar a branch mais avançada, não recomeçar de branches intermediárias;
+- commits e pushes frequentes;
+- bloqueio ambiental é documentado e o próximo item resolvível por código é atacado;
+- não instalar infraestrutura paga nem aceitar custo recorrente obrigatório;
+- @Context7 para contratos atuais de bibliotecas quando necessário;
+- toolchains para Actions/checkout;
+- gates de browser/deploy só contam quando executados contra o ambiente adequado.
 
 ## Restrições permanentes
 
@@ -193,5 +110,5 @@ Nenhum projeto pago deve ser criado automaticamente. Custo recorrente obrigatór
 - local-first;
 - sem perda silenciosa em conflitos;
 - sem ImageGen no fluxo visual sem nova autorização explícita;
-- decisões puramente técnicas podem ser fechadas pelo agente quando preservarem produto, segurança/privacidade e custo zero;
-- decisões que alterem comportamento/UX aprovado ou impliquem custo obrigatório voltam ao usuário.
+- decisões puramente técnicas podem ser fechadas autonomamente quando preservam produto, segurança/privacidade e custo zero;
+- mudanças de UX aprovada, privacidade, modelo de custo ou escopo do produto voltam ao usuário.
