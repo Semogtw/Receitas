@@ -31,7 +31,7 @@ export function inspectPwaSource(content) {
 export function inspectPwaLifecycleSource({ lifecycle, banner }) {
   const findings = []
 
-  if (!lifecycle.includes("useRegisterSW({")) {
+  if (!lifecycle.includes('useRegisterSW({')) {
     findings.push('PWA lifecycle must register through the prompt-aware React hook')
   }
   if (!lifecycle.includes('updateApprovedRef.current = true')) {
@@ -40,11 +40,11 @@ export function inspectPwaLifecycleSource({ lifecycle, banner }) {
   if (!lifecycle.includes('if (updateApprovedRef.current) window.location.reload()')) {
     findings.push('PWA reload must remain conditional on explicit approval in this tab')
   }
-  if (!lifecycle.includes('await updateServiceWorker()')) {
-    findings.push('PWA update must activate the waiting worker only from the explicit action')
+  if (!/await\s+updateServiceWorker\s*\(\s*true\s*\)/.test(lifecycle)) {
+    findings.push('PWA update action must request activation/reload with updateServiceWorker(true) after explicit approval')
   }
-  if (/updateServiceWorker\s*\(\s*true\s*\)/.test(lifecycle)) {
-    findings.push('PWA update lifecycle should not rely on the deprecated/ignored reloadPage argument')
+  if (/await\s+updateServiceWorker\s*\(\s*\)/.test(lifecycle)) {
+    findings.push('PWA update action must not drop the reloadPage=true argument required by the current React integration contract')
   }
   if (!banner.includes('campos de formulário ainda não salvos podem ser perdidos')) {
     findings.push('PWA update prompt must warn about unsaved form fields before reload')
