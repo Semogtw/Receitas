@@ -73,6 +73,22 @@ Deno.test('assertPublicImportUrl rejects schemes, credentials, non-standard port
   await assertRejects(() => assertPublicImportUrl('http://printer.local/', resolver), 'hostname_not_allowed')
 })
 
+Deno.test('assertPublicImportUrl rejects alternate textual encodings of loopback addresses', async () => {
+  const resolver: HostResolver = async () => {
+    throw new Error('literal IP inputs must not require DNS resolution')
+  }
+
+  for (const url of [
+    'http://2130706433/',
+    'http://0x7f000001/',
+    'http://0177.0.0.1/',
+    'http://127.1/',
+    'http://[::ffff:127.0.0.1]/',
+  ]) {
+    await assertRejects(() => assertPublicImportUrl(url, resolver), 'resolved_address_not_public')
+  }
+})
+
 Deno.test('assertPublicImportUrl rejects DNS answers when any resolved address is non-public', async () => {
   const mixedResolver: HostResolver = async () => ['93.184.216.34', '10.0.0.2']
   await assertRejects(
