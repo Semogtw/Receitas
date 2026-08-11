@@ -32,7 +32,7 @@ export function PwaLifecycle() {
     setUpdating(true)
     setUpdateError(false)
     try {
-      await updateServiceWorker()
+      await updateServiceWorker(true)
     } catch {
       updateApprovedRef.current = false
       setUpdating(false)
