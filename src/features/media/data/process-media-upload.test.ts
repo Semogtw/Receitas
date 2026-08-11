@@ -69,31 +69,39 @@ describe('processNextMediaUpload', () => {
     expect(fixtureValue.blobs.getForUpload).not.toHaveBeenCalled()
   })
 
-  it('marks a missing cached blob as failed and never publishes metadata', async () => {
+  it('marks a missing cached blob as failed with a stable local message', async () => {
     const value = fixture({ blob: null })
 
     await expect(processNextMediaUpload(value)).resolves.toEqual({ status: 'failed', mediaId: 'photo-a' })
-    expect(value.queue.markFailed).toHaveBeenCalledWith('photo-a', expect.stringContaining('cached'))
+    expect(value.queue.markFailed).toHaveBeenCalledWith(
+      'photo-a',
+      'A foto preparada não está mais disponível neste dispositivo.',
+    )
     expect(value.storage.upload).not.toHaveBeenCalled()
     expect(value.metadata.publish).not.toHaveBeenCalled()
   })
 
-  it('keeps the job recoverable when storage or metadata publication fails', async () => {
+  it('keeps the job recoverable without persisting raw provider or database errors', async () => {
     const value = fixture()
-    value.metadata.publish.mockRejectedValueOnce(new Error('database offline'))
+    const providerMessage = 'database offline https://private.example.test/path?token=secret'
+    value.metadata.publish.mockRejectedValueOnce(new Error(providerMessage))
 
     await expect(processNextMediaUpload(value)).resolves.toEqual({ status: 'failed', mediaId: 'photo-a' })
     expect(value.storage.upload).toHaveBeenCalledTimes(1)
     expect(value.queue.remove).not.toHaveBeenCalled()
-    expect(value.queue.markFailed).toHaveBeenCalledWith('photo-a', 'database offline')
+    expect(value.queue.markFailed).toHaveBeenCalledWith('photo-a', 'Não foi possível enviar a foto. Tente novamente.')
+    expect(JSON.stringify(value.queue.markFailed.mock.calls)).not.toContain(providerMessage)
   })
 
-  it('treats a pair-scope blob rejection as a recoverable upload failure', async () => {
+  it('treats a pair-scope blob rejection as a recoverable upload failure with a stable message', async () => {
     const value = fixture()
     value.blobs.getForUpload.mockRejectedValueOnce(new Error('Media upload job does not belong to the active cache scope'))
 
     await expect(processNextMediaUpload(value)).resolves.toEqual({ status: 'failed', mediaId: 'photo-a' })
     expect(value.storage.upload).not.toHaveBeenCalled()
-    expect(value.queue.markFailed).toHaveBeenCalledWith('photo-a', expect.stringContaining('active cache scope'))
+    expect(value.queue.markFailed).toHaveBeenCalledWith(
+      'photo-a',
+      'Esta foto pertence a outra sessão local e não pode ser enviada.',
+    )
   })
 })
