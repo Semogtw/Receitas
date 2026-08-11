@@ -35,6 +35,59 @@ function cssVars(block) {
   return Object.fromEntries([...block.matchAll(/--([a-z0-9-]+)\s*:\s*(#[0-9a-f]{6})\s*;/gi)].map((match) => [match[1], match[2]]))
 }
 
+function atRuleBlock(source, pattern) {
+  const match = pattern.exec(source)
+  if (!match) return ''
+  const open = source.indexOf('{', match.index)
+  if (open < 0) return ''
+
+  let depth = 0
+  for (let index = open; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1
+    if (source[index] === '}') {
+      depth -= 1
+      if (depth === 0) return source.slice(open + 1, index)
+    }
+  }
+  return ''
+}
+
+function cssDurationToMilliseconds(value) {
+  const match = /^([\d.]+)(ms|s)$/i.exec(value.trim())
+  if (!match) return Number.NaN
+  const amount = Number(match[1])
+  return match[2].toLowerCase() === 's' ? amount * 1000 : amount
+}
+
+function reducedMotionFindings(base) {
+  const findings = []
+  const block = atRuleBlock(base, /@media\s*\(prefers-reduced-motion:\s*reduce\)/g)
+  if (!block) return ['reduced-motion preference must remain supported']
+
+  if (!/\*\s*,\s*\*::before\s*,\s*\*::after\s*\{/.test(block)) {
+    findings.push('reduced-motion override must cover elements and pseudo-elements')
+  }
+  if (!/scroll-behavior\s*:\s*auto\s*!important\s*;/.test(block)) {
+    findings.push('reduced-motion override must disable smooth scrolling')
+  }
+  if (!/animation-iteration-count\s*:\s*1\s*!important\s*;/.test(block)) {
+    findings.push('reduced-motion override must prevent repeated animation loops')
+  }
+
+  for (const [property, label] of [
+    ['animation-duration', 'animation duration'],
+    ['transition-duration', 'transition duration'],
+  ]) {
+    const match = block.match(new RegExp(`${property}\\s*:\\s*([\\d.]+(?:ms|s))\\s*!important\\s*;`, 'i'))
+    const durationMs = match ? cssDurationToMilliseconds(match[1]) : Number.NaN
+    if (!Number.isFinite(durationMs) || durationMs > 0.01) {
+      findings.push(`reduced-motion ${label} must remain at or below 0.01ms with !important`)
+    }
+  }
+
+  return findings
+}
+
 export function inspectAccessibilitySources({ tokens, themes, base, dialogs }) {
   const findings = []
 
@@ -45,9 +98,7 @@ export function inspectAccessibilitySources({ tokens, themes, base, dialogs }) {
   if (!/:focus-visible\s*\{[\s\S]*?outline\s*:\s*(?!0\b|none\b)/m.test(base)) {
     findings.push('keyboard focus must keep a visible non-zero outline')
   }
-  if (!/@media\s*\(prefers-reduced-motion:\s*reduce\)/.test(base)) {
-    findings.push('reduced-motion preference must remain supported')
-  }
+  findings.push(...reducedMotionFindings(base))
 
   const light = cssVars(themeBlock(themes, ':root,\n[data-theme=\'light\']') || themeBlock(themes, "[data-theme='light']"))
   const dark = cssVars(themeBlock(themes, "[data-theme='dark']"))
