@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const REQUIRED_RELEASE_E2E = [
+  'tests/e2e/public-shell.spec.ts',
   'tests/e2e/app-shell.spec.ts',
   'tests/e2e/release-acceptance.spec.ts',
   'tests/e2e/offline-recovery.spec.ts',
@@ -26,10 +27,15 @@ function command(scripts, name) {
 export function inspectReleaseCommands(packageJson) {
   const findings = []
   const scripts = packageJson?.scripts ?? {}
+  const smokeE2e = command(scripts, 'test:e2e:smoke')
   const releaseE2e = command(scripts, 'test:e2e:release')
   const verify = command(scripts, 'verify')
   const verifyRelease = command(scripts, 'verify:release')
   const deployed = command(scripts, 'test:e2e:deployed')
+
+  if (!smokeE2e.includes('tests/e2e/public-shell.spec.ts')) findings.push('test:e2e:smoke must use the credential-free public shell spec')
+  if (smokeE2e.includes('tests/e2e/app-shell.spec.ts')) findings.push('test:e2e:smoke must not depend on the authenticated staging shell')
+  if (/E2E_(?:EMAIL|PASSWORD)/.test(smokeE2e)) findings.push('test:e2e:smoke must not require staging credentials')
 
   if (!releaseE2e.startsWith('playwright test ')) findings.push('test:e2e:release must execute Playwright directly')
   for (const spec of REQUIRED_RELEASE_E2E) if (!releaseE2e.includes(spec)) findings.push(`test:e2e:release must include ${spec}`)
