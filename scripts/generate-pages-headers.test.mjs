@@ -25,14 +25,15 @@ test('uses exact Supabase and PowerSync origins without broad https wildcards', 
   assert(!headers.includes('wss://*'))
 })
 
-test('includes the release privacy and framing headers', () => {
+test('includes the release privacy and framing headers with unused browser capabilities denied', () => {
   const headers = buildPagesHeaders(INPUT)
 
   assert(headers.includes('X-Content-Type-Options: nosniff'))
   assert(headers.includes('Referrer-Policy: no-referrer'))
   assert(headers.includes('X-Frame-Options: DENY'))
   assert(headers.includes('X-Robots-Tag: noindex, nofollow'))
-  assert(headers.includes('Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=(), usb=()'))
+  assert(headers.includes('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()'))
+  assert(!headers.includes('camera=(self)'))
 })
 
 test('only emits HSTS for production release output', () => {
