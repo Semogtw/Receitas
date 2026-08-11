@@ -28,6 +28,22 @@ Never point these variables at a production pair or personal account.
 
 No destructive-restore opt-in is required for this fixture-local cleanup. If cleanup fails, the spec fails visibly instead of hiding staging residue.
 
+### Real PWA update preservation
+
+`pwa-update.spec.ts` is a coordinated two-build gate. It must only run against disposable staging, never production.
+
+Set `E2E_PWA_UPDATE=1`, start `pnpm test:e2e:release` while build A is serving the staging origin, then deploy build B to that **same origin** while the PWA update spec is waiting. The spec:
+
+1. authenticates and requires the page to be controlled by the current service worker;
+2. records the SHA-256 digest of the currently served `sw.js`;
+3. creates a uniquely named recipe while offline so local persisted state exists before the update;
+4. reconnects and repeatedly asks the browser registration to check for an update;
+5. requires the app's `Nova versão disponível` prompt and a different `sw.js` digest, proving this is not a same-build reload;
+6. clicks `Atualizar agora`, waits for the controlling-worker navigation/reload and verifies the local recipe still exists;
+7. opens a fresh browser context to prove the recipe reached the remote sync path, then moves only that fixture to staging trash.
+
+Without `E2E_PWA_UPDATE=1`, this spec skips deliberately. A skipped update spec is **not** evidence that the real cross-deploy PWA gate passed; release status must keep that gate pending until a coordinated staging run succeeds.
+
 ## URL import fixtures
 
 Required for URL-import acceptance:
