@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(12);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password,
@@ -14,6 +14,9 @@ update public.pair_members
    set activated_at = now()
  where pair_id = current_setting('test.pair_id')::uuid
    and user_id = '70000000-0000-4000-8000-000000000001';
+
+insert into public.pairs (id, status)
+values ('73000000-0000-4000-8000-000000000001', 'open_for_second_member');
 
 select set_config(
   'request.jwt.claims',
@@ -101,6 +104,30 @@ select throws_ok(
   ),
   '42501', 'actor mismatch',
   'mutation actor must equal the authenticated identity'
+);
+
+select throws_ok(
+  $$select * from public.apply_client_mutation(
+    '71000000-0000-4000-8000-000000000098',
+    '73000000-0000-4000-8000-000000000001'::uuid,
+    '70000000-0000-4000-8000-000000000001',
+    'recipes',
+    '72000000-0000-4000-8000-000000000098',
+    'create',
+    null,
+    null,
+    jsonb_build_object(
+      'pair_id', '73000000-0000-4000-8000-000000000001',
+      'revision', 0,
+      'title', 'Receita de outro par',
+      'favorite', 0,
+      'want_to_make', 0,
+      'source_kind', 'manual',
+      'created_by', '70000000-0000-4000-8000-000000000001'
+    )
+  )$$,
+  '42501', 'active pair membership required',
+  'authenticated user cannot submit a semantic mutation for another pair'
 );
 
 select is(
