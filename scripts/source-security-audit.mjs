@@ -1,5 +1,5 @@
 import { readdir, readFile, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { extname, join, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const JWT_REQUIRED_FUNCTIONS = ['pair-invite', 'import-url', 'backup-restore', 'account-admin', 'permanent-delete']
@@ -142,6 +142,45 @@ export function inspectMediaBucketSource({ mediaConfig, restoreCommit, storageMi
   return findings
 }
 
+export function inspectEdgeLogSource(content, filename = 'edge.ts') {
+  const findings = []
+  const withoutComments = content
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ')
+
+  const consoleCalls = [...withoutComments.matchAll(/console\.(?:log|info|warn|error|debug)\s*\(([\s\S]*?)\)\s*;?/g)]
+  for (const match of consoleCalls) {
+    const args = match[1]
+    if (/\b(?:error|err|exception|cause)\s*\.\s*(?:message|stack|cause)\b/i.test(args)) {
+      findings.push(`${filename}: Edge logs must not persist arbitrary exception message, stack or cause data`)
+    }
+    if (/\brequest\s*\.\s*(?:url|body)\b/i.test(args)) {
+      findings.push(`${filename}: Edge logs must not persist raw request URL/body data`)
+    }
+    if (/\b(?:authorization|access_token|refresh_token|service_role|apikey|password)\b/i.test(args)) {
+      findings.push(`${filename}: Edge logs must not include credential-bearing fields or literals`)
+    }
+  }
+
+  return findings
+}
+
+async function edgeSourceFiles(root) {
+  const base = join(root, 'supabase', 'functions')
+  const files = []
+
+  async function visit(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name)
+      if (entry.isDirectory()) await visit(path)
+      else if (entry.isFile() && ['.ts', '.tsx'].includes(extname(entry.name)) && !entry.name.endsWith('.test.ts')) files.push(path)
+    }
+  }
+
+  await visit(base)
+  return files.sort()
+}
+
 export async function auditSourceSecurity(root = process.cwd()) {
   const findings = []
   const configPath = join(root, 'supabase', 'config.toml')
@@ -169,6 +208,11 @@ export async function auditSourceSecurity(root = process.cwd()) {
     readFile(join(root, 'supabase', 'migrations', '0015_media_storage.sql'), 'utf8').catch(() => ''),
   ])
   findings.push(...inspectMediaBucketSource({ mediaConfig, restoreCommit, storageMigration }))
+
+  for (const path of await edgeSourceFiles(root)) {
+    const content = await readFile(path, 'utf8')
+    findings.push(...inspectEdgeLogSource(content, relative(root, path)))
+  }
 
   return [...new Set(findings)].sort()
 }
