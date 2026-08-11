@@ -101,7 +101,7 @@ export function buildPagesHeaders({ supabaseUrl, powersyncUrl, releaseEnv = 'pre
     `  Content-Security-Policy: ${csp}`,
     '  X-Content-Type-Options: nosniff',
     '  Referrer-Policy: no-referrer',
-    '  Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=(), usb=()',
+    '  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()',
     '  X-Frame-Options: DENY',
     '  X-Robots-Tag: noindex, nofollow',
   ]
