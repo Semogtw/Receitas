@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.110.9'
+import { normalizeApplicationOrigin } from './origin.ts'
 
 let adminClient: SupabaseClient | undefined
 
@@ -39,7 +40,7 @@ export function createServerClient(): SupabaseClient {
 }
 
 export function getAppBaseUrl(): string {
-  return requiredEnv('APP_BASE_URL').replace(/\/$/, '')
+  return normalizeApplicationOrigin(requiredEnv('APP_BASE_URL'), 'app_base_url')
 }
 
 export function getBootstrapSecret(): string {
