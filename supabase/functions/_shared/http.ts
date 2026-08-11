@@ -66,6 +66,12 @@ function responseWithCors(request: Request, response: Response): Response {
   })
 }
 
+export function safeErrorClass(error: unknown): string {
+  if (!(error instanceof Error)) return 'UnknownError'
+  const name = error.name.trim()
+  return /^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/.test(name) ? name : 'Error'
+}
+
 /**
  * Wrapper for newer Edge handlers that centralizes OPTIONS/origin handling and
  * ensures ordinary handler responses carry the same strict CORS headers as the
@@ -86,7 +92,10 @@ export function withCorsAndErrors(
       if (error instanceof Error && error.message === 'authentication_required') {
         return jsonResponse(request, { error: 'authentication_required' }, 401)
       }
-      console.error('edge_handler_internal_error', error instanceof Error ? error.message : 'unknown')
+      // Do not log arbitrary exception messages: SDK/network errors may include
+      // URLs, payload fragments or other user/infra context. The class is enough
+      // to distinguish broad failure families without persisting sensitive data.
+      console.error('edge_handler_internal_error', safeErrorClass(error))
       return jsonResponse(request, { error: 'internal_error' }, 500)
     }
   }
