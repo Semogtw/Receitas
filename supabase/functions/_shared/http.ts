@@ -1,19 +1,22 @@
+import { parseAllowedApplicationOrigins } from './origin.ts'
+
 const defaultAllowedHeaders = 'authorization, x-client-info, apikey, content-type'
 
 function configuredOrigins(): Set<string> {
   const configured = Deno.env.get('ALLOWED_ORIGINS') ?? Deno.env.get('APP_BASE_URL') ?? ''
-  return new Set(
-    configured
-      .split(',')
-      .map((value) => value.trim().replace(/\/$/, ''))
-      .filter(Boolean),
-  )
+  return parseAllowedApplicationOrigins(configured)
 }
 
 export function requestOriginAllowed(request: Request): boolean {
   const origin = request.headers.get('origin')
   if (!origin) return true
-  return configuredOrigins().has(origin.replace(/\/$/, ''))
+
+  try {
+    return configuredOrigins().has(origin)
+  } catch {
+    // Fail closed when deployment origin configuration is absent or malformed.
+    return false
+  }
 }
 
 export function corsHeadersFor(request: Request): HeadersInit {
