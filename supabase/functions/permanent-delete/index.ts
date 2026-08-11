@@ -120,6 +120,7 @@ export async function cleanupPendingMediaDeletes(
 
 function knownErrorStatus(message: string): number | null {
   if (message === 'active_pair_required') return 403
+  if (message === 'request_body_too_large') return 413
   if (message === 'invalid_entity_type' || message === 'invalid_entity_id' || message.startsWith('invalid_')) return 400
   if (message.includes('must exist in this pair') || message.includes('entity must exist')) return 404
   return null
