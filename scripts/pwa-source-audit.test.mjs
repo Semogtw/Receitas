@@ -22,7 +22,7 @@ const { updateServiceWorker } = useRegisterSW({
 })
 async function applyUpdate() {
   updateApprovedRef.current = true
-  await updateServiceWorker()
+  await updateServiceWorker(true)
 }
 `
 
@@ -78,10 +78,11 @@ test('rejects update prompts that hide unsaved-form risk or remove defer action'
   assert(findings.some((finding) => finding.includes('apply and defer')))
 })
 
-test('rejects reliance on the reloadPage argument instead of explicit lifecycle control', () => {
+test('rejects dropping the reloadPage=true argument from the approved update action', () => {
   const findings = inspectPwaLifecycleSource({
-    lifecycle: SAFE_LIFECYCLE.replace('await updateServiceWorker()', 'await updateServiceWorker(true)'),
+    lifecycle: SAFE_LIFECYCLE.replace('await updateServiceWorker(true)', 'await updateServiceWorker()'),
     banner: SAFE_BANNER,
   })
-  assert(findings.some((finding) => finding.includes('reloadPage argument')))
+  assert(findings.some((finding) => finding.includes('updateServiceWorker(true)')))
+  assert(findings.some((finding) => finding.includes('must not drop')))
 })
