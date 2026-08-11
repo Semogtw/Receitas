@@ -70,10 +70,11 @@ Required:
 
 - `E2E_DEPLOYED_URL`: exact HTTPS origin of the deployed Receitas preview/staging site, for example `https://example.pages.dev` with **no path/query/credentials**.
 
-The spec checks the real HTTP responses for:
+The spec checks the real HTTP/browser behavior for:
 
 - CSP and security/privacy headers;
 - absence of broad `https://*`/`wss://*` CSP sources;
+- browser enforcement of `script-src` through a controlled external-script violation probe;
 - Cloudflare's 2,000-character per-header value budget for the generated CSP;
 - SPA deep-link fallback for private and replacement callback routes;
 - `robots.txt` and HTML `noindex,nofollow` metadata.
@@ -83,6 +84,8 @@ Run it with:
 ```text
 pnpm test:e2e:deployed
 ```
+
+That command uses `playwright.deployed.config.ts`, which intentionally has **no local `webServer`**. It talks only to the absolute HTTPS origin supplied by `E2E_DEPLOYED_URL`, so a deployed-origin check cannot accidentally pass against `vite preview` or fail merely because a local `dist` server was not started.
 
 Without `E2E_DEPLOYED_URL`, those tests skip rather than pretending local preview proves host-level headers.
 
@@ -94,6 +97,6 @@ pnpm test:e2e:release
 pnpm test:e2e:deployed
 ```
 
-The first two use the normal Playwright web server/preview configuration. The deployed-origin spec uses an absolute HTTPS URL supplied by `E2E_DEPLOYED_URL`.
+The first two use the normal Playwright web server/preview configuration. The deployed-origin spec uses its dedicated no-preview configuration and an absolute HTTPS URL supplied by `E2E_DEPLOYED_URL`.
 
 These specs are **written acceptance gates**, not evidence that the staging/deployed gates passed. They require the actual Receitas Supabase/Storage/PowerSync/Cloudflare environment with current migrations and Edge Functions before their results can be marked green.
