@@ -90,6 +90,17 @@ describe('complete backup manifest parsing', () => {
     expect(() => parseCompleteBackupManifest(JSON.stringify(value))).toThrow('unsupported field')
   })
 
+  it('rejects identity and membership data domains from untrusted manifests', () => {
+    for (const path of ['data/pair-members.json', 'data/auth-users.json']) {
+      const current = manifest()
+      const value = {
+        ...current,
+        dataFiles: [...current.dataFiles, { path, sha256: checksum, bytes: 2 }],
+      }
+      expect(() => parseCompleteBackupManifest(JSON.stringify(value))).toThrow(`Unsupported backup data entry path: ${path}`)
+    }
+  })
+
   it('round-trips a valid strict manifest', () => {
     expect(parseCompleteBackupManifest(JSON.stringify(manifest()))).toEqual(manifest())
   })
