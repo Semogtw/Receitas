@@ -20,7 +20,7 @@
     "check:edge": "deno check supabase/functions/*/index.ts",
     "verify:edge": "pnpm test:edge && pnpm check:edge",
     "verify:cost": "node scripts/verify-zero-cost-config.mjs",
-    "verify:source": "node scripts/source-security-audit.mjs && node scripts/pwa-source-audit.mjs && node scripts/ui-integration-audit.mjs && node scripts/release-command-audit.mjs && node scripts/playwright-config-audit.mjs && node scripts/media-session-isolation-audit.mjs && node scripts/accessibility-source-audit.mjs && node scripts/verify-zero-cost-config.mjs",
+    "verify:source": "node scripts/source-security-audit.mjs && node scripts/pwa-source-audit.mjs && node scripts/ui-integration-audit.mjs && node scripts/release-command-audit.mjs && node scripts/playwright-config-audit.mjs && node scripts/csp-source-audit.mjs && node scripts/media-session-isolation-audit.mjs && node scripts/accessibility-source-audit.mjs && node scripts/verify-zero-cost-config.mjs",
     "verify": "pnpm lint && pnpm typecheck && pnpm test:run && pnpm test:release-scripts && pnpm verify:source && pnpm verify:edge && pnpm build:pages && pnpm test:e2e:smoke",
     "verify:release": "pnpm verify && pnpm test:e2e:release",
     "verify:deployed": "pnpm test:e2e:deployed",
