@@ -50,20 +50,57 @@ export function jsonResponse(request: Request, body: unknown, status = 200): Res
   })
 }
 
-export async function readJsonObject(
-  request: Request,
-  maxBytes = DEFAULT_JSON_BODY_LIMIT_BYTES,
-): Promise<Record<string, unknown>> {
-  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw new Error('invalid_json_body_limit')
-
+async function readBoundedBody(request: Request, maxBytes: number): Promise<Uint8Array> {
   const contentLength = request.headers.get('content-length')
   if (contentLength !== null) {
     const declared = Number(contentLength)
     if (Number.isFinite(declared) && declared > maxBytes) throw new Error('request_body_too_large')
   }
 
-  const text = await request.text()
-  if (new TextEncoder().encode(text).byteLength > maxBytes) throw new Error('request_body_too_large')
+  if (!request.body) return new Uint8Array()
+
+  const reader = request.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!value) continue
+      total += value.byteLength
+      if (total > maxBytes) {
+        await reader.cancel('request_body_too_large').catch(() => undefined)
+        throw new Error('request_body_too_large')
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  const bytes = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return bytes
+}
+
+export async function readJsonObject(
+  request: Request,
+  maxBytes = DEFAULT_JSON_BODY_LIMIT_BYTES,
+): Promise<Record<string, unknown>> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw new Error('invalid_json_body_limit')
+
+  let text: string
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(await readBoundedBody(request, maxBytes))
+  } catch (error) {
+    if (error instanceof Error && error.message === 'request_body_too_large') throw error
+    throw new Error('invalid_json_object')
+  }
 
   let value: unknown
   try {
