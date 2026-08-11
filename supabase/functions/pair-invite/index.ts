@@ -1,5 +1,5 @@
 import { randomOpaqueToken, sha256Hex } from '../_shared/crypto.ts'
-import { jsonResponse, preflightResponse, readJsonObject, requestOriginAllowed } from '../_shared/http.ts'
+import { jsonResponse, preflightResponse, readJsonObject, requestOriginAllowed, safeErrorClass } from '../_shared/http.ts'
 import { getAdminClient, getAppBaseUrl, getRequestUserId } from '../_shared/server.ts'
 import { PairInvitePublicError, runPairInvite } from './service.ts'
 
@@ -85,7 +85,7 @@ Deno.serve(async (request) => {
       return jsonResponse(request, { error: 'Corpo JSON inválido.', code: 'invalid_json' }, 400)
     }
 
-    console.error('pair_invite_internal_error', error instanceof Error ? error.message : 'unknown')
+    console.error('pair_invite_internal_error', safeErrorClass(error))
     return jsonResponse(request, { error: 'Falha interna ao criar convite.', code: 'internal_error' }, 500)
   }
 })
