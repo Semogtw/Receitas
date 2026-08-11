@@ -8,16 +8,9 @@ import {
 
 export const MAX_SOURCE_IMAGE_BYTES = 32 * 1024 * 1024
 export const MAX_PREPARED_IMAGE_BYTES = 20 * 1024 * 1024
+export const SUPPORTED_SOURCE_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/avif,image/gif,image/heic,image/heif'
 
-const SUPPORTED_SOURCE_IMAGE_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/avif',
-  'image/gif',
-  'image/heic',
-  'image/heif',
-])
+const SUPPORTED_SOURCE_IMAGE_TYPES = new Set(SUPPORTED_SOURCE_IMAGE_ACCEPT.split(','))
 
 export interface DecodedImage {
   source: CanvasImageSource
