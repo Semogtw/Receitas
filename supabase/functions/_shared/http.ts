@@ -1,6 +1,7 @@
 import { parseAllowedApplicationOrigins } from './origin.ts'
 
 const defaultAllowedHeaders = 'authorization, x-client-info, apikey, content-type'
+export const DEFAULT_JSON_BODY_LIMIT_BYTES = 32 * 1024
 
 function configuredOrigins(): Set<string> {
   const configured = Deno.env.get('ALLOWED_ORIGINS') ?? Deno.env.get('APP_BASE_URL') ?? ''
@@ -49,8 +50,27 @@ export function jsonResponse(request: Request, body: unknown, status = 200): Res
   })
 }
 
-export async function readJsonObject(request: Request): Promise<Record<string, unknown>> {
-  const value = await request.json()
+export async function readJsonObject(
+  request: Request,
+  maxBytes = DEFAULT_JSON_BODY_LIMIT_BYTES,
+): Promise<Record<string, unknown>> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw new Error('invalid_json_body_limit')
+
+  const contentLength = request.headers.get('content-length')
+  if (contentLength !== null) {
+    const declared = Number(contentLength)
+    if (Number.isFinite(declared) && declared > maxBytes) throw new Error('request_body_too_large')
+  }
+
+  const text = await request.text()
+  if (new TextEncoder().encode(text).byteLength > maxBytes) throw new Error('request_body_too_large')
+
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    throw new Error('invalid_json_object')
+  }
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('invalid_json_object')
   }
