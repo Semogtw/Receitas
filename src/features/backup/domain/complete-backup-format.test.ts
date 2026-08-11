@@ -61,6 +61,18 @@ describe('complete backup format', () => {
     })).toThrow('Invalid backup entry path')
   })
 
+  it('rejects data domains that could smuggle identity or membership state', () => {
+    for (const path of ['data/pair-members.json', 'data/auth-users.json']) {
+      expect(() => createBackupManifest({
+        createdAt: '2026-08-09T10:00:00.000Z',
+        appVersion: '0.0.0',
+        pairExportId: 'export-1',
+        dataFiles: [...requiredDataFiles(), { path, sha256: checksum, bytes: 2 }],
+        mediaFiles: [],
+      })).toThrow(`Unsupported backup data entry path: ${path}`)
+    }
+  })
+
   it('rejects credentials and sessions by field name before serialization', () => {
     expect(() => assertBackupValueHasNoSecrets({ recipe: { title: 'Bolo' }, access_token: 'secret' })).toThrow(
       'forbidden field',
