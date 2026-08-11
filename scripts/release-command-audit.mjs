@@ -6,6 +6,7 @@ const REQUIRED_RELEASE_E2E = [
   'tests/e2e/app-shell.spec.ts',
   'tests/e2e/release-acceptance.spec.ts',
   'tests/e2e/offline-recovery.spec.ts',
+  'tests/e2e/pwa-update.spec.ts',
   'tests/e2e/import.spec.ts',
   'tests/e2e/backup-restore.spec.ts',
   'tests/e2e/diagnostics.spec.ts',
