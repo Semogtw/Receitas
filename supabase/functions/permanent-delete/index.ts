@@ -2,6 +2,7 @@ import { jsonResponse, readJsonObject, withCorsAndErrors } from '../_shared/http
 import { getAdminClient, getRequestUserId } from '../_shared/server.ts'
 
 const MEDIA_BUCKET = 'recipe-media'
+const MEDIA_DELETE_FAILURE_CODE = 'storage_delete_failed'
 const ALLOWED_ENTITY_TYPES = new Set([
   'recipes',
   'recipe_ingredients',
@@ -74,12 +75,11 @@ async function markCleanupFailure(
   client: ServerClient,
   pairId: string,
   storagePath: string,
-  message: string,
 ): Promise<void> {
   const { error } = await client.rpc('mark_media_delete_failed_server', {
     p_pair_id: pairId,
     p_storage_path: storagePath,
-    p_error: message,
+    p_error: MEDIA_DELETE_FAILURE_CODE,
   })
   if (error) console.error('media_delete_queue_mark_failed')
 }
@@ -98,12 +98,9 @@ export async function cleanupPendingMediaDeletes(
 
     const removal = await client.storage.from(MEDIA_BUCKET).remove([storagePath])
     if (removal.error) {
-      await markCleanupFailure(
-        client,
-        pairId,
-        storagePath,
-        removal.error.message?.trim() || 'storage_delete_failed',
-      )
+      // Provider messages can include implementation details. Persist only a
+      // stable retryable code; the queue already records the affected path.
+      await markCleanupFailure(client, pairId, storagePath)
       continue
     }
 
