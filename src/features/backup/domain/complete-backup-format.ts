@@ -43,6 +43,8 @@ export const COMPLETE_BACKUP_DATA_PATHS = [
   'data/photo-metadata.json',
 ] as const
 
+const COMPLETE_BACKUP_DATA_PATH_SET = new Set<string>(COMPLETE_BACKUP_DATA_PATHS)
+
 const FORBIDDEN_FIELD_NAMES = new Set([
   'password',
   'access_token',
@@ -98,6 +100,9 @@ export function createBackupManifest(input: {
 
   for (const descriptor of dataFiles) {
     assertDescriptor(descriptor, 'data/')
+    if (!COMPLETE_BACKUP_DATA_PATH_SET.has(descriptor.path)) {
+      throw new Error(`Unsupported backup data entry path: ${descriptor.path}`)
+    }
     if (paths.has(descriptor.path)) throw new Error(`Duplicate backup entry path: ${descriptor.path}`)
     paths.add(descriptor.path)
   }
