@@ -41,6 +41,37 @@ test.describe('deployed origin security', () => {
     expect(csp.length).toBeLessThanOrEqual(2_000)
   })
 
+  test('browser enforces script-src against a known external origin', async ({ page }) => {
+    await page.goto(origin!.toString(), { waitUntil: 'domcontentloaded' })
+
+    const violation = await page.evaluate(async () => {
+      const blockedScript = 'https://csp-blocked.invalid/receitas-release-probe.js'
+      return new Promise<{ blockedURI: string; effectiveDirective: string }>((resolve, reject) => {
+        const timeout = window.setTimeout(() => {
+          reject(new Error('No securitypolicyviolation event was observed for the external script probe'))
+        }, 5_000)
+
+        const onViolation = (event: SecurityPolicyViolationEvent) => {
+          if (!event.blockedURI.includes('csp-blocked.invalid')) return
+          window.clearTimeout(timeout)
+          document.removeEventListener('securitypolicyviolation', onViolation)
+          resolve({
+            blockedURI: event.blockedURI,
+            effectiveDirective: event.effectiveDirective,
+          })
+        }
+
+        document.addEventListener('securitypolicyviolation', onViolation)
+        const script = document.createElement('script')
+        script.src = blockedScript
+        document.head.appendChild(script)
+      })
+    })
+
+    expect(violation.blockedURI).toContain('https://csp-blocked.invalid/')
+    expect(violation.effectiveDirective).toMatch(/^script-src(?:-elem)?$/)
+  })
+
   test('serves SPA deep links without redirecting to a public marketing/error page', async ({ request }) => {
     for (const path of ['/recipes', '/recipes/import', '/settings', '/auth/finish-replacement']) {
       const response = await request.get(new URL(path, origin!).toString(), { maxRedirects: 0 })
