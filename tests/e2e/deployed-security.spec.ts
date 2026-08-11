@@ -26,6 +26,7 @@ test.describe('deployed origin security', () => {
     expect(headers['referrer-policy']).toBe('no-referrer')
     expect(headers['x-frame-options']).toBe('DENY')
     expect(headers['x-robots-tag']).toBe('noindex, nofollow')
+    expect(headers['permissions-policy']).toContain('camera=()')
     expect(headers['permissions-policy']).toContain('microphone=()')
     expect(headers['permissions-policy']).toContain('geolocation=()')
     expect(headers['permissions-policy']).toContain('payment=()')
