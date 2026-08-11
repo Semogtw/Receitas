@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { PowerSyncDatabase } from '@powersync/web'
 import { TrashRepository } from '../../trash/trash-repository'
+import { SUPPORTED_SOURCE_IMAGE_ACCEPT } from '../browser/prepare-image'
 import type { MediaUploadJob, MediaUploadOwnerType } from '../data/media-upload-queue'
 import { PhotoReadRepository, type PhotoMetadata } from '../data/photo-read-repository'
 import type { MediaRuntime } from '../media-runtime'
@@ -215,7 +216,7 @@ export function OwnerPhotosPanel({
             ref={fileInputRef}
             aria-label="Arquivo da foto"
             type="file"
-            accept="image/*"
+            accept={SUPPORTED_SOURCE_IMAGE_ACCEPT}
             onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)}
           />
         </label>
