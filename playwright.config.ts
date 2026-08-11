@@ -1,5 +1,28 @@
 import { defineConfig, devices } from '@playwright/test'
 
+export const releaseBrowserProjects = [
+  {
+    name: 'chromium-desktop',
+    use: { ...devices['Desktop Chrome'] },
+  },
+  {
+    name: 'firefox-desktop',
+    use: { ...devices['Desktop Firefox'] },
+  },
+  {
+    name: 'webkit-desktop',
+    use: { ...devices['Desktop Safari'] },
+  },
+  {
+    name: 'mobile-chrome',
+    use: { ...devices['Pixel 7'] },
+  },
+  {
+    name: 'mobile-safari',
+    use: { ...devices['iPhone 15'] },
+  },
+]
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
@@ -15,26 +38,5 @@ export default defineConfig({
     url: 'http://127.0.0.1:4173/recipes',
     reuseExistingServer: false,
   },
-  projects: [
-    {
-      name: 'chromium-desktop',
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: 'firefox-desktop',
-      use: { ...devices['Desktop Firefox'] },
-    },
-    {
-      name: 'webkit-desktop',
-      use: { ...devices['Desktop Safari'] },
-    },
-    {
-      name: 'mobile-chrome',
-      use: { ...devices['Pixel 7'] },
-    },
-    {
-      name: 'mobile-safari',
-      use: { ...devices['iPhone 15'] },
-    },
-  ],
+  projects: releaseBrowserProjects,
 })
