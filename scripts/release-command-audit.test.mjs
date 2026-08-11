@@ -9,7 +9,7 @@ function securePackage() {
       verify: 'pnpm lint && pnpm typecheck && pnpm test:run && pnpm test:release-scripts && pnpm verify:source && pnpm verify:edge && pnpm build:pages && pnpm test:e2e:smoke',
       'verify:release': 'pnpm verify && pnpm test:e2e:release',
       'test:e2e:release': 'playwright test tests/e2e/app-shell.spec.ts tests/e2e/release-acceptance.spec.ts tests/e2e/offline-recovery.spec.ts tests/e2e/pwa-update.spec.ts tests/e2e/import.spec.ts tests/e2e/backup-restore.spec.ts tests/e2e/diagnostics.spec.ts tests/e2e/recipes.spec.ts tests/e2e/cooking.spec.ts tests/e2e/media.spec.ts tests/e2e/planner-shopping.spec.ts tests/e2e/trash-restore.spec.ts tests/e2e/conflicts.spec.ts tests/e2e/accessibility-layout.spec.ts',
-      'test:e2e:deployed': 'playwright test tests/e2e/deployed-security.spec.ts',
+      'test:e2e:deployed': 'playwright test --config playwright.deployed.config.ts tests/e2e/deployed-security.spec.ts',
     },
   }
 }
@@ -44,4 +44,12 @@ test('rejects verify when an executable gate disappears', () => {
 
   const findings = inspectReleaseCommands(packageJson)
   assert(findings.some((finding) => finding.includes('pnpm verify:edge')))
+})
+
+test('rejects deployed-origin checks that fall back to the local-preview config', () => {
+  const packageJson = securePackage()
+  packageJson.scripts['test:e2e:deployed'] = 'playwright test tests/e2e/deployed-security.spec.ts'
+
+  const findings = inspectReleaseCommands(packageJson)
+  assert(findings.some((finding) => finding.includes('deployed-only Playwright config')))
 })
