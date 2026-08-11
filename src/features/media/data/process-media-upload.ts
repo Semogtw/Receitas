@@ -25,9 +25,15 @@ export type MediaUploadProcessResult =
   | { status: 'uploaded'; mediaId: string }
   | { status: 'failed'; mediaId: string }
 
-function errorMessage(cause: unknown): string {
-  if (cause instanceof Error && cause.message.trim()) return cause.message.trim()
-  return 'Media upload failed'
+function safeUploadFailureMessage(cause: unknown): string {
+  const message = cause instanceof Error ? cause.message : ''
+  if (message.includes('no longer cached')) {
+    return 'A foto preparada não está mais disponível neste dispositivo.'
+  }
+  if (message.includes('active cache scope')) {
+    return 'Esta foto pertence a outra sessão local e não pode ser enviada.'
+  }
+  return 'Não foi possível enviar a foto. Tente novamente.'
 }
 
 export async function processNextMediaUpload(input: {
@@ -59,7 +65,9 @@ export async function processNextMediaUpload(input: {
     await input.queue.remove(job.id)
     return { status: 'uploaded', mediaId: job.id }
   } catch (cause) {
-    await input.queue.markFailed(job.id, errorMessage(cause))
+    // Queue errors are persisted and rendered to the user. Never copy raw SDK
+    // or provider messages because they may contain URLs or infrastructure data.
+    await input.queue.markFailed(job.id, safeUploadFailureMessage(cause))
     return { status: 'failed', mediaId: job.id }
   }
 }
