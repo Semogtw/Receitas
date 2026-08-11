@@ -82,6 +82,9 @@ Deno.serve(async (request) => {
     if (error instanceof BootstrapPublicError) {
       return jsonResponse(request, { error: error.message, code: error.code }, error.status)
     }
+    if (error instanceof Error && error.message === 'request_body_too_large') {
+      return jsonResponse(request, { error: 'Corpo da requisição muito grande.', code: 'request_body_too_large' }, 413)
+    }
     if (error instanceof SyntaxError || (error instanceof Error && error.message === 'invalid_json_object')) {
       return jsonResponse(request, { error: 'Corpo JSON inválido.', code: 'invalid_json' }, 400)
     }
