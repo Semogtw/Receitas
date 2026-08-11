@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  inspectEdgeLogSource,
   inspectMediaBucketSource,
   inspectMigrationSequence,
   inspectPrivatePrivilegeSql,
@@ -137,4 +138,38 @@ test('ignores unsafe-looking privilege text inside SQL comments', () => {
     /* grant execute on function private.secret(uuid) to anon; */
     revoke all on schema private from public, anon, authenticated;
   `), [])
+})
+
+test('accepts structural Edge diagnostics that omit raw exception data', () => {
+  assert.deepEqual(
+    inspectEdgeLogSource("console.error('edge_handler_internal_error', safeErrorClass(error))", 'http.ts'),
+    [],
+  )
+})
+
+test('rejects Edge logs containing exception internals, request bodies or credentials', () => {
+  const samples = [
+    "console.error('failed', error.message)",
+    "console.warn('failed', err.stack)",
+    "console.info('request', request.url)",
+    "console.debug('payload', request.body)",
+    "console.error('auth', authorization)",
+    "console.error('token', access_token)",
+  ]
+
+  for (const source of samples) {
+    const findings = inspectEdgeLogSource(source, 'bad.ts')
+    assert(findings.length > 0, `${source} must be rejected`)
+  }
+})
+
+test('ignores sensitive-looking Edge log examples that exist only in comments', () => {
+  assert.deepEqual(
+    inspectEdgeLogSource(`
+      // console.error(error.message)
+      /* console.warn(request.body) */
+      console.error('edge_handler_internal_error', safeErrorClass(error))
+    `, 'safe.ts'),
+    [],
+  )
 })
