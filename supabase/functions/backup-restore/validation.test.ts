@@ -117,6 +117,19 @@ Deno.test('server manifest parsing is strict and canonical hash is stable', asyn
   assertThrows(() => parseRestoreManifest({ ...manifest, dataFiles: manifest.dataFiles.slice(1) }), 'manifest_missing_data')
 })
 
+Deno.test('restore manifest cannot introduce identity or membership datasets', async () => {
+  const { manifest } = await fixture()
+  for (const path of ['data/users.json', 'data/pair-members.json']) {
+    assertThrows(() => parseRestoreManifest({
+      ...manifest,
+      dataFiles: [
+        ...manifest.dataFiles,
+        { path, bytes: 2, sha256: '0'.repeat(64) },
+      ],
+    }), 'manifest_unknown_data_file')
+  }
+})
+
 Deno.test('data staging only accepts declared descriptors and bounded canonical batches', async () => {
   const { manifest } = await fixture()
   const descriptor = manifest.dataFiles.find((entry) => entry.path === 'data/recipes.json')!
