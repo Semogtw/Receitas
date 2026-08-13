@@ -1,4 +1,4 @@
-import { withCorsAndErrors } from '../_shared/http.ts'
+import { readJsonObject, withCorsAndErrors } from '../_shared/http.ts'
 import { createServerClient, getRequestUserId } from '../_shared/server.ts'
 import { ImportFetchError, safeFetchImportPayload } from './safe-fetch.ts'
 import { sanitizeImportPayload } from './sanitize-payload.ts'
@@ -11,22 +11,6 @@ function json(status: number, body: unknown): Response {
     status,
     headers: { 'content-type': 'application/json; charset=utf-8' },
   })
-}
-
-async function requestJson(request: Request): Promise<Record<string, unknown> | null> {
-  const declaredLength = Number(request.headers.get('content-length') ?? 0)
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BYTES) return null
-
-  const text = await request.text()
-  if (new TextEncoder().encode(text).byteLength > MAX_REQUEST_BYTES) return null
-  try {
-    const value: unknown = JSON.parse(text)
-    return value !== null && typeof value === 'object' && !Array.isArray(value)
-      ? value as Record<string, unknown>
-      : null
-  } catch {
-    return null
-  }
 }
 
 function importFailure(error: ImportFetchError): Response {
@@ -57,8 +41,16 @@ const handler = async (request: Request): Promise<Response> => {
   const admin = createServerClient()
   const userId = await getRequestUserId(admin, request)
 
-  const body = await requestJson(request)
-  if (!body) return json(400, { error: 'invalid_request' })
+  let body: Record<string, unknown>
+  try {
+    body = await readJsonObject(request, MAX_REQUEST_BYTES)
+  } catch (error) {
+    if (error instanceof Error && error.message === 'request_body_too_large') {
+      return json(413, { error: 'request_body_too_large' })
+    }
+    return json(400, { error: 'invalid_request' })
+  }
+
   const rawUrl = typeof body.url === 'string' ? body.url.trim() : ''
   if (!rawUrl || rawUrl.length > MAX_URL_LENGTH) return json(400, { error: 'invalid_url' })
 
