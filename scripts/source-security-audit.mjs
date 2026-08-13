@@ -2,6 +2,8 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import { extname, join, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { executableSource } from './source-code-mask.mjs'
+
 const JWT_REQUIRED_FUNCTIONS = ['pair-invite', 'import-url', 'backup-restore', 'account-admin', 'permanent-delete']
 export const CANONICAL_MEDIA_BUCKET = 'recipe-media'
 
@@ -144,21 +146,25 @@ export function inspectMediaBucketSource({ mediaConfig, restoreCommit, storageMi
 
 export function inspectEdgeLogSource(content, filename = 'edge.ts') {
   const findings = []
-  const withoutComments = content
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/\/\/[^\n]*/g, ' ')
+  const source = executableSource(content)
+  const consoleCalls = [...source.matchAll(/console\.(?:log|info|warn|error|debug)\s*\(([\s\S]*?)\)\s*;?/g)]
 
-  const consoleCalls = [...withoutComments.matchAll(/console\.(?:log|info|warn|error|debug)\s*\(([\s\S]*?)\)\s*;?/g)]
   for (const match of consoleCalls) {
     const args = match[1]
-    if (/\b(?:error|err|exception|cause)\s*\.\s*(?:message|stack|cause)\b/i.test(args)) {
-      findings.push(`${filename}: Edge logs must not persist arbitrary exception message, stack or cause data`)
+    const unsanitizedArgs = args.replace(/\bsafeErrorClass\s*\([^)]*\)/g, ' ')
+
+    if (/\b(?:error|err|exception|cause)\s*\.\s*(?:message|stack|cause)\b/i.test(args)
+      || /\b(?:error|err|exception|cause)\b/i.test(unsanitizedArgs)) {
+      findings.push(`${filename}: Edge logs must not persist arbitrary exception objects, messages, stacks or causes`)
     }
-    if (/\brequest\s*\.\s*(?:url|body)\b/i.test(args)) {
-      findings.push(`${filename}: Edge logs must not persist raw request URL/body data`)
+    if (/\brequest\s*\.\s*(?:url|body|headers)\b/i.test(args)) {
+      findings.push(`${filename}: Edge logs must not persist raw request URL/body/header data`)
     }
     if (/\b(?:authorization|access_token|refresh_token|service_role|apikey|password)\b/i.test(args)) {
       findings.push(`${filename}: Edge logs must not include credential-bearing fields or literals`)
+    }
+    if (/\b(?:email|userId|user_id|pairId|pair_id)\b/.test(args)) {
+      findings.push(`${filename}: Edge logs must not persist user or pair identifiers/PII`)
     }
   }
 
