@@ -1,5 +1,5 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.110.9'
-import { withCorsAndErrors } from '../_shared/http.ts'
+import { readJsonObject as readBoundedJsonObject, withCorsAndErrors } from '../_shared/http.ts'
 import { createServerClient, getAppBaseUrl, getRequestUserId } from '../_shared/server.ts'
 import { assertRecentPasswordAuthentication, bearerToken } from './recent-auth.ts'
 
@@ -29,15 +29,8 @@ function json(status: number, body: unknown): Response {
 }
 
 async function readJsonObject(request: Request): Promise<Record<string, unknown> | null> {
-  const declared = Number(request.headers.get('content-length') ?? 0)
-  if (Number.isFinite(declared) && declared > 32 * 1024) return null
-  const text = await request.text()
-  if (new TextEncoder().encode(text).byteLength > 32 * 1024) return null
   try {
-    const value: unknown = JSON.parse(text)
-    return value && typeof value === 'object' && !Array.isArray(value)
-      ? value as Record<string, unknown>
-      : null
+    return await readBoundedJsonObject(request)
   } catch {
     return null
   }
