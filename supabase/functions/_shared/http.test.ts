@@ -15,6 +15,16 @@ async function assertRejects(action: () => Promise<unknown>, expected: string): 
   throw new Error(`expected rejection containing ${expected}`)
 }
 
+function streamedRequest(chunks: Uint8Array[]): Request {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk)
+      controller.close()
+    },
+  })
+  return new Request('https://edge.invalid', { method: 'POST', body })
+}
+
 Deno.test('safeErrorClass exposes only a bounded structural error class', () => {
   const error = new Error('https://private.example.test/path?token=secret user payload fragment')
   error.name = 'TypeError'
@@ -63,5 +73,28 @@ Deno.test('readJsonObject rejects oversized bodies by declared or measured byte 
       body: JSON.stringify({ value: 'á'.repeat(40) }),
     }), 64),
     'request_body_too_large',
+  )
+})
+
+Deno.test('readJsonObject enforces measured limits across streamed chunks', async () => {
+  const encoder = new TextEncoder()
+  await assertRejects(
+    () => readJsonObject(streamedRequest([
+      encoder.encode('{"value":"'),
+      encoder.encode('12345678'),
+      encoder.encode('901234567890"}'),
+    ]), 24),
+    'request_body_too_large',
+  )
+})
+
+Deno.test('readJsonObject rejects malformed UTF-8 before JSON parsing', async () => {
+  await assertRejects(
+    () => readJsonObject(streamedRequest([
+      new Uint8Array([0x7b, 0x22, 0x78, 0x22, 0x3a, 0x22]),
+      new Uint8Array([0xc3, 0x28]),
+      new Uint8Array([0x22, 0x7d]),
+    ]), 64),
+    'invalid_json_object',
   )
 })
