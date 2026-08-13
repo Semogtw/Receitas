@@ -163,11 +163,27 @@ test('rejects Edge logs containing exception internals, request bodies or creden
   }
 })
 
-test('ignores sensitive-looking Edge log examples that exist only in comments', () => {
+test('rejects raw exception objects and structured user/pair PII in Edge logs', () => {
+  const samples = [
+    "console.error('failed', error)",
+    "console.warn('user', userId)",
+    "console.info('pair', pair_id)",
+    "console.debug('contact', email)",
+    "console.error('headers', request.headers)",
+  ]
+
+  for (const source of samples) {
+    const findings = inspectEdgeLogSource(source, 'bad.ts')
+    assert(findings.length > 0, `${source} must be rejected`)
+  }
+})
+
+test('ignores sensitive-looking Edge log examples that exist only in comments or strings', () => {
   assert.deepEqual(
     inspectEdgeLogSource(`
       // console.error(error.message)
       /* console.warn(request.body) */
+      const example = 'console.error(userId)'
       console.error('edge_handler_internal_error', safeErrorClass(error))
     `, 'safe.ts'),
     [],
