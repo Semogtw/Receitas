@@ -1,4 +1,4 @@
-import { withCorsAndErrors } from '../_shared/http.ts'
+import { readJsonObject, withCorsAndErrors } from '../_shared/http.ts'
 import { createServerClient, getRequestUserId } from '../_shared/server.ts'
 import {
   commitRestoreMerge,
@@ -22,22 +22,6 @@ function json(status: number, body: unknown): Response {
     status,
     headers: { 'content-type': 'application/json; charset=utf-8' },
   })
-}
-
-async function boundedJsonObject(request: Request): Promise<Record<string, unknown> | null> {
-  const declared = Number(request.headers.get('content-length') ?? 0)
-  if (Number.isFinite(declared) && declared > MAX_REQUEST_BYTES) return null
-
-  const text = await request.text()
-  if (new TextEncoder().encode(text).byteLength > MAX_REQUEST_BYTES) return null
-  try {
-    const value: unknown = JSON.parse(text)
-    return value && typeof value === 'object' && !Array.isArray(value)
-      ? value as Record<string, unknown>
-      : null
-  } catch {
-    return null
-  }
 }
 
 function publicError(error: unknown): Response {
@@ -97,8 +81,15 @@ function publicError(error: unknown): Response {
 const handler = async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' })
 
-  const body = await boundedJsonObject(request)
-  if (!body) return json(400, { error: 'invalid_request' })
+  let body: Record<string, unknown>
+  try {
+    body = await readJsonObject(request, MAX_REQUEST_BYTES)
+  } catch (error) {
+    if (error instanceof Error && error.message === 'request_body_too_large') {
+      return json(413, { error: 'request_body_too_large' })
+    }
+    return json(400, { error: 'invalid_request' })
+  }
   const action = typeof body.action === 'string' ? body.action : ''
 
   const admin = createServerClient()
