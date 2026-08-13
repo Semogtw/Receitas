@@ -29,13 +29,34 @@ test('rejects direct Request body readers in Edge entrypoints', () => {
   }
 })
 
-test('ignores raw-reader examples that exist only in comments', () => {
+test('ignores raw-reader examples that exist only in comments or strings', () => {
   assert.deepEqual(
     inspectEdgeRequestBodySource(`
       // await request.text()
       /* request.body?.getReader() */
+      const single = 'request.json()'
+      const double = "request.formData()"
+      const template = \`request.blob()\`
       const body = await readJsonObject(request)
     `, 'supabase/functions/example/index.ts'),
     [],
   )
+})
+
+test('does not mistake URL slashes for comments before a direct body read', () => {
+  const findings = inspectEdgeRequestBodySource(`
+    const endpoint = 'https://example.invalid/path'
+    const body = await request.text()
+  `, 'supabase/functions/example/index.ts')
+
+  assert(findings.some((finding) => finding.includes('request.text()')))
+})
+
+test('audits executable code inside template interpolation', () => {
+  const findings = inspectEdgeRequestBodySource(
+    'const diagnostic = `body=${await request.text()}`',
+    'supabase/functions/example/index.ts',
+  )
+
+  assert(findings.some((finding) => finding.includes('request.text()')))
 })
