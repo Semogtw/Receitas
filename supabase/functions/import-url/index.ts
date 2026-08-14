@@ -73,6 +73,8 @@ export function createImportUrlHandler(dependencies: ImportUrlHandlerDependencie
       .from('pair_members')
       .select('pair_id')
       .eq('user_id', userId)
+      .is('removed_at', null)
+      .not('activated_at', 'is', null)
       .maybeSingle()
     if (membershipError) return json(503, { error: 'membership_check_unavailable' })
     if (!membership) return json(403, { error: 'pair_membership_required' })
