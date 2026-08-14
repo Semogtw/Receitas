@@ -2,6 +2,7 @@ import type { PowerSyncDatabase } from '@powersync/web'
 import { performLocalMutation } from '../../../data/mutations/performLocalMutation'
 import { createMutationEnvelope, type MutationEnvelope } from '../../../data/mutations/types'
 import type { RecipeRepositoryScope } from '../../recipes/data/recipe-repository'
+import { buildMediaStoragePath } from '../domain/storage-path'
 import type { MediaUploadJob } from './media-upload-queue'
 
 type MutationWriter = (database: PowerSyncDatabase, envelope: MutationEnvelope) => Promise<string>
@@ -31,6 +32,10 @@ export class PhotoMetadataPublisher {
     }
 
     const storagePath = cleanPath(storagePathInput)
+    if (storagePath !== buildMediaStoragePath(job)) {
+      throw new Error('Media metadata storage path does not match the upload job')
+    }
+
     const entityType = job.ownerType === 'recipe' ? 'recipe_photos' : 'cooking_session_photos'
     const parentField = job.ownerType === 'recipe' ? 'recipe_id' : 'cooking_session_id'
 
