@@ -46,26 +46,16 @@ export function createPairInviteHandler(dependencies: PairInviteHandlerDependenc
           return data.pair_id as string
         },
         revokePending: async (pairId, creatorUserId) => {
-          const { error } = await admin.rpc('revoke_pending_pair_invite', {
+          const { data: revokedUserId, error } = await admin.rpc('revoke_pending_pair_invite', {
             target_pair_id: pairId,
             creator_user_id: creatorUserId,
           })
           if (error) throw error
 
-          const { data: orphanedInvites, error: orphanError } = await admin
-            .from('pair_invites')
-            .select('invited_user_id')
-            .eq('pair_id', pairId)
-            .is('consumed_at', null)
-            .not('invalidated_at', 'is', null)
-            .not('invited_user_id', 'is', null)
-
-          if (orphanError) throw orphanError
-          return Array.from(new Set(
-            (orphanedInvites ?? [])
-              .map((row) => row.invited_user_id as string | null)
-              .filter((value): value is string => Boolean(value)),
-          ))
+          // The transaction returns the identity belonging to exactly the invite
+          // it just invalidated. Never sweep historical invalidated invites: an
+          // old UUID is not evidence that its current Auth identity is disposable.
+          return typeof revokedUserId === 'string' && revokedUserId ? [revokedUserId] : []
         },
         deleteUser: async (userId) => {
           const { error } = await admin.auth.admin.deleteUser(userId)
