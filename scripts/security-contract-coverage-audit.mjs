@@ -13,6 +13,12 @@ export const REQUIRED_SECURITY_CONTRACTS = {
     'active member can read content-addressed media restored into its own pair',
     'active member cannot read restored media from another pair',
   ],
+  'supabase/tests/media_metadata_storage_path.sql': [
+    'metadata cannot point at another pair namespace',
+    'metadata cannot point at a different parent entity',
+    'content-addressed restore path is accepted when pair, actor, photo, checksum and MIME agree',
+    'restore metadata path must carry the row checksum',
+  ],
   'supabase/tests/identity_rls.sql': [
     'second bootstrap attempt is rejected',
     'third pending/current seat cannot be inserted while invite is pending',
