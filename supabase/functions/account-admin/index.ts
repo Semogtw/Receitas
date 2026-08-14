@@ -15,12 +15,15 @@ interface AccountAdminStatusRow {
     status: string
     expires_at: string
     auth_cleanup_pending: boolean
+    replacement_auth_cleanup_pending: boolean
   }
   auth_cleanup_actions: Array<{
     id: string
     target_user_id: string
+    replacement_user_id: string | null
     status: string
     auth_cleanup_pending: boolean
+    replacement_auth_cleanup_pending: boolean
   }>
 }
 
@@ -122,7 +125,7 @@ async function publicStatus(admin: SupabaseClient, pairId: string, actorUserId: 
       replacementUserId,
       replacementEmail,
       expiresAt: text(pending.expires_at, 'account_admin_replacement_expiry', 64),
-      authCleanupPending: pending.auth_cleanup_pending === true,
+      authCleanupPending: pending.auth_cleanup_pending === true || pending.replacement_auth_cleanup_pending === true,
     } : null,
     authCleanupPending: status.auth_cleanup_actions.length > 0,
   }
@@ -136,18 +139,49 @@ async function markAuthCleanup(admin: SupabaseClient, actionId: string, pending:
   if (error) throw new Error('account_admin_cleanup_mark_failed')
 }
 
+async function markReplacementAuthCleanup(admin: SupabaseClient, actionId: string, pending: boolean): Promise<void> {
+  const { error } = await admin.rpc('account_admin_mark_replacement_auth_cleanup', {
+    p_action_id: actionId,
+    p_pending: pending,
+  })
+  if (error) throw new Error('account_admin_replacement_cleanup_mark_failed')
+}
+
+async function acknowledgeCleanup(markClean: () => Promise<void>): Promise<boolean> {
+  try {
+    await markClean()
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function deleteAuthIdentity(admin: SupabaseClient, userId: string, actionId: string): Promise<boolean> {
   const { error } = await admin.auth.admin.deleteUser(userId, false)
   if (!error) {
-    await markAuthCleanup(admin, actionId, false).catch(() => undefined)
-    return true
+    return acknowledgeCleanup(() => markAuthCleanup(admin, actionId, false))
   }
 
   // A retry may observe an identity that was already removed by the provider.
-  const { data } = await admin.auth.admin.getUserById(userId)
+  // Provider lookup errors are not proof of deletion and must keep the queue.
+  const { data, error: lookupError } = await admin.auth.admin.getUserById(userId)
+  if (lookupError) return false
   if (!data.user) {
-    await markAuthCleanup(admin, actionId, false).catch(() => undefined)
-    return true
+    return acknowledgeCleanup(() => markAuthCleanup(admin, actionId, false))
+  }
+  return false
+}
+
+async function deleteReplacementAuthIdentity(admin: SupabaseClient, userId: string, actionId: string): Promise<boolean> {
+  const { error } = await admin.auth.admin.deleteUser(userId, false)
+  if (!error) {
+    return acknowledgeCleanup(() => markReplacementAuthCleanup(admin, actionId, false))
+  }
+
+  const { data, error: lookupError } = await admin.auth.admin.getUserById(userId)
+  if (lookupError) return false
+  if (!data.user) {
+    return acknowledgeCleanup(() => markReplacementAuthCleanup(admin, actionId, false))
   }
   return false
 }
@@ -272,16 +306,21 @@ export function createAccountAdminHandler(dependencies: AccountAdminDependencies
         })
         if (error || !replacementUserIdRaw) throw new Error('account_admin_replacement_cancel_failed')
         const replacementUserId = uuid(replacementUserIdRaw, 'account_admin_replacement_user_id')
-        await admin.auth.admin.deleteUser(replacementUserId, false).catch(() => undefined)
-        return json(200, { cancelled: true })
+        const authDeleted = await deleteReplacementAuthIdentity(admin, replacementUserId, actionId)
+        return json(200, { cancelled: true, authCleanupPending: !authDeleted })
       }
 
       if (action === 'retry_auth_cleanup') {
-        const pending = status.auth_cleanup_actions
-        for (const item of pending) {
+        for (const item of status.auth_cleanup_actions) {
           const actionId = uuid(item.id, 'account_admin_action_id')
-          const targetUserId = uuid(item.target_user_id, 'account_admin_target_user_id')
-          await deleteAuthIdentity(admin, targetUserId, actionId)
+          if (item.auth_cleanup_pending === true) {
+            const targetUserId = uuid(item.target_user_id, 'account_admin_target_user_id')
+            await deleteAuthIdentity(admin, targetUserId, actionId)
+          }
+          if (item.replacement_auth_cleanup_pending === true && item.replacement_user_id) {
+            const replacementUserId = uuid(item.replacement_user_id, 'account_admin_replacement_user_id')
+            await deleteReplacementAuthIdentity(admin, replacementUserId, actionId)
+          }
         }
         const refreshed = await readStatus(admin, pairId, userId)
         return json(200, { authCleanupPending: refreshed.auth_cleanup_actions.length > 0 })
