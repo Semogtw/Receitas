@@ -137,6 +137,8 @@ export function createPermanentDeleteHandler(dependencies: PermanentDeleteDepend
       // Invalid public input should fail before allocating the privileged client
       // or spending an authenticated-user lookup.
       const body = await readJsonObject(request)
+      const deleteRequest = body.action === 'cleanup' ? null : parsePermanentDeleteRequest(body)
+
       const client = getClient()
       const userId = await getUserId(client, request)
       const pairId = await activePairId(client, userId)
@@ -146,7 +148,7 @@ export function createPermanentDeleteHandler(dependencies: PermanentDeleteDepend
         return jsonResponse(request, { ok: true, cleanupPending: cleanup.remaining > 0 })
       }
 
-      const { entityType, entityId } = parsePermanentDeleteRequest(body)
+      const { entityType, entityId } = deleteRequest!
       const { error } = await client.rpc('permanently_delete_entity_server', {
         p_actor_user_id: userId,
         p_entity_type: entityType,
