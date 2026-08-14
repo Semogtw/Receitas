@@ -16,6 +16,7 @@ const recipeJob: MediaUploadJob = {
   width: 1600,
   height: 1200,
   sizeBytes: 12345,
+  sha256: 'a'.repeat(64),
   position: 2,
   caption: 'Saindo do forno',
   createdAt: '2026-08-07T20:00:00.000Z',
@@ -55,7 +56,14 @@ describe('PhotoMetadataPublisher', () => {
         revision: 0,
         recipe_id: 'recipe-a',
         storage_path: 'pairs/pair-a/recipes/recipe-a/photo-a.webp',
+        storage_state: 'uploaded',
+        mime_type: 'image/webp',
+        byte_size: 12345,
+        width: 1600,
+        height: 1200,
+        sha256: 'a'.repeat(64),
         position: 2,
+        is_cover: false,
         caption: 'Saindo do forno',
         created_by: 'user-a',
         created_at: '2026-08-07T20:00:00.000Z',
@@ -77,9 +85,18 @@ describe('PhotoMetadataPublisher', () => {
     expect(envelopes[0]).toMatchObject({
       entityType: 'cooking_session_photos',
       entityId: 'photo-b',
-      next: expect.objectContaining({ cooking_session_id: 'session-a' }),
+      next: expect.objectContaining({
+        cooking_session_id: 'session-a',
+        storage_state: 'uploaded',
+        mime_type: 'image/webp',
+        byte_size: 12345,
+        width: 1600,
+        height: 1200,
+        sha256: 'a'.repeat(64),
+      }),
     })
     expect(envelopes[0]?.next).not.toHaveProperty('recipe_id')
+    expect(envelopes[0]?.next).not.toHaveProperty('is_cover')
   })
 
   it('is idempotent when the same active photo row already exists with the same remote path', async () => {
