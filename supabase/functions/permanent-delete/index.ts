@@ -133,11 +133,12 @@ export function createPermanentDeleteHandler(dependencies: PermanentDeleteDepend
   return withCorsAndErrors(async (request) => {
     if (request.method !== 'POST') return jsonResponse(request, { error: 'method_not_allowed' }, 405)
 
-    const client = getClient()
-    const userId = await getUserId(client, request)
-
     try {
+      // Invalid public input should fail before allocating the privileged client
+      // or spending an authenticated-user lookup.
       const body = await readJsonObject(request)
+      const client = getClient()
+      const userId = await getUserId(client, request)
       const pairId = await activePairId(client, userId)
 
       if (body.action === 'cleanup') {
