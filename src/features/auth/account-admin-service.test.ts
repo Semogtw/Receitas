@@ -63,6 +63,7 @@ function fakeEnvironment() {
         data: {
           status: {
             otherMember: { userId: '10000000-0000-4000-8000-000000000002', email: 'other@example.com' },
+            replacementAvailable: true,
             pendingReplacement: null,
             authCleanupPending: false,
           },
@@ -153,7 +154,7 @@ describe('AccountAdminService', () => {
     expect(fake.invoke).not.toHaveBeenCalled()
   })
 
-  it('loads only the server-derived other member and recovery status', async () => {
+  it('loads only the server-derived other member and recovery capability', async () => {
     const fake = fakeEnvironment()
 
     const status = await fake.service.status()
@@ -162,6 +163,7 @@ describe('AccountAdminService', () => {
       userId: '10000000-0000-4000-8000-000000000002',
       email: 'other@example.com',
     })
+    expect(status.replacementAvailable).toBe(true)
     expect(status.pendingReplacement).toBeNull()
     expect(status.authCleanupPending).toBe(false)
   })
