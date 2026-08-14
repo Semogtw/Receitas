@@ -30,7 +30,7 @@ Deno.test('pair invite entrypoint is import-safe and rejects non-POST before aut
   assertEquals(clientCalls, 0)
 })
 
-Deno.test('pair invite rejects oversized JSON before creating the service-role client', async () => {
+Deno.test('pair invite rejects oversized JSON before authentication or service-role client creation', async () => {
   let userCalls = 0
   let clientCalls = 0
   const handler = createPairInviteHandler({
@@ -56,14 +56,18 @@ Deno.test('pair invite rejects oversized JSON before creating the service-role c
     error: 'Corpo da requisição muito grande.',
     code: 'request_body_too_large',
   })
-  assertEquals(userCalls, 1)
+  assertEquals(userCalls, 0)
   assertEquals(clientCalls, 0)
 })
 
-Deno.test('pair invite rejects malformed JSON before creating the service-role client', async () => {
+Deno.test('pair invite rejects malformed JSON before authentication or service-role client creation', async () => {
+  let userCalls = 0
   let clientCalls = 0
   const handler = createPairInviteHandler({
-    getUserId: async () => actorUserId,
+    getUserId: async () => {
+      userCalls += 1
+      return actorUserId
+    },
     getClient: () => {
       clientCalls += 1
       throw new Error('client_must_not_be_created')
@@ -81,5 +85,6 @@ Deno.test('pair invite rejects malformed JSON before creating the service-role c
     error: 'Corpo JSON inválido.',
     code: 'invalid_json',
   })
+  assertEquals(userCalls, 0)
   assertEquals(clientCalls, 0)
 })
