@@ -5,18 +5,27 @@ import { pathToFileURL } from 'node:url'
 import { executableSource } from './source-code-mask.mjs'
 
 const EXPLICITLY_PUBLIC_EDGE_FUNCTIONS = new Set(['bootstrap'])
+const SERVICE_ROLE_ACTIVE_MEMBERSHIP_FUNCTIONS = new Set(['import-url'])
 
 export function inspectEdgeAuthSource(content, functionName, filename = 'index.ts') {
   if (EXPLICITLY_PUBLIC_EDGE_FUNCTIONS.has(functionName)) return []
 
   const source = executableSource(content)
+  const findings = []
   if (!/\bgetRequestUserId\s*\(/.test(source)) {
-    return [
-      `${filename}: protected Edge entrypoint must resolve the authenticated user with getRequestUserId()`,
-    ]
+    findings.push(`${filename}: protected Edge entrypoint must resolve the authenticated user with getRequestUserId()`)
   }
 
-  return []
+  if (SERVICE_ROLE_ACTIVE_MEMBERSHIP_FUNCTIONS.has(functionName)) {
+    if (!/\.is\s*\(\s*['"]removed_at['"]\s*,\s*null\s*\)/.test(source)) {
+      findings.push(`${filename}: service-role membership lookup must exclude removed pair members`)
+    }
+    if (!/\.not\s*\(\s*['"]activated_at['"]\s*,\s*['"]is['"]\s*,\s*null\s*\)/.test(source)) {
+      findings.push(`${filename}: service-role membership lookup must require activated pair members`)
+    }
+  }
+
+  return findings
 }
 
 async function edgeEntrypoints(root) {
