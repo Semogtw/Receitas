@@ -32,6 +32,11 @@ export const REQUIRED_SECURITY_CONTRACTS = {
     'confirmed invited replacement activates membership',
     'replacement completion keeps the private pair closed',
   ],
+  'supabase/tests/account_admin_cancel_cleanup_contract.sql': [
+    'cancel removes unactivated replacement membership before external auth cleanup',
+    'cancel records replacement auth cleanup before leaving database transaction',
+    'server cleanup acknowledgement clears replacement auth cleanup queue',
+  ],
   'supabase/tests/sync_cross_pair_security.sql': [
     'semantic mutation cannot target a pair the authenticated user does not belong to',
     'semantic mutation cannot smuggle another pair id through the payload',
