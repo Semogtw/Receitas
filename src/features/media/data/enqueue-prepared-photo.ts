@@ -20,6 +20,7 @@ interface EnqueuePreparedPhotoInput {
   mediaId?: string
   now?: string
   prepare?: (file: Blob) => Promise<PreparedImage>
+  hash?: (blob: Blob) => Promise<string>
   cache: PreparedPhotoCache
   queue: PreparedPhotoQueue
 }
@@ -35,6 +36,11 @@ function cleanCaption(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null
 }
 
+async function sha256Blob(blob: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
 export async function enqueuePreparedPhoto(input: EnqueuePreparedPhotoInput): Promise<MediaUploadJob> {
   const pairId = cleanRequired(input.pairId, 'Pair id')
   const ownerId = cleanRequired(input.ownerId, 'Owner id')
@@ -44,6 +50,9 @@ export async function enqueuePreparedPhoto(input: EnqueuePreparedPhotoInput): Pr
 
   const mediaId = cleanRequired(input.mediaId ?? crypto.randomUUID(), 'Media id')
   const prepared = await (input.prepare ?? prepareImageForUpload)(input.file)
+  const sha256 = (await (input.hash ?? sha256Blob)(prepared.blob)).trim().toLowerCase()
+  if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error('Prepared media checksum is invalid')
+
   const job: MediaUploadJob = {
     version: 1,
     id: mediaId,
@@ -55,6 +64,7 @@ export async function enqueuePreparedPhoto(input: EnqueuePreparedPhotoInput): Pr
     width: prepared.width,
     height: prepared.height,
     sizeBytes: prepared.blob.size,
+    sha256,
     position: input.position,
     caption: cleanCaption(input.caption),
     createdAt: input.now ?? new Date().toISOString(),
