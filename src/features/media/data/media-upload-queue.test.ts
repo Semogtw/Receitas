@@ -13,6 +13,7 @@ const baseJob: MediaUploadJob = {
   width: 1600,
   height: 1200,
   sizeBytes: 12345,
+  sha256: 'a'.repeat(64),
   position: 0,
   caption: null,
   createdAt: '2026-08-07T20:00:00.000Z',
@@ -37,7 +38,14 @@ describe('MediaUploadQueueStore', () => {
     const persisted = JSON.parse(String(execute.mock.calls.at(-1)?.[1]?.[0])) as MediaUploadJob[]
     expect(persisted).toHaveLength(1)
     expect(persisted[0]).toEqual(baseJob)
+    expect(persisted[0]?.sha256).toBe('a'.repeat(64))
     expect(JSON.stringify(persisted[0])).not.toContain('blob')
+  })
+
+  it('rejects persisted jobs without a valid content checksum', async () => {
+    const { sha256: _sha256, ...withoutChecksum } = baseJob
+    const store = new MediaUploadQueueStore(databaseWith([withoutChecksum]).database)
+    await expect(store.load()).rejects.toThrow('malformed')
   })
 
   it('is idempotent when the same media id is enqueued twice', async () => {
