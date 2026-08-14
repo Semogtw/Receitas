@@ -5,6 +5,7 @@ import { RestoreStagingService, type RestoreJobSummary, type RestoreStagingProgr
 
 export interface AccountAdminStatus {
   otherMember: { userId: string; email: string | null } | null
+  replacementAvailable: boolean
   pendingReplacement: {
     actionId: string
     replacementUserId: string | null
@@ -70,6 +71,7 @@ function parseStatus(value: unknown): AccountAdminStatus {
 
   const other = otherRaw === null || otherRaw === undefined ? null : record(otherRaw, 'Other member')
   const pending = pendingRaw === null || pendingRaw === undefined ? null : record(pendingRaw, 'Pending replacement')
+  if (typeof row.replacementAvailable !== 'boolean') throw new Error('Account replacement status is invalid')
   if (typeof row.authCleanupPending !== 'boolean') throw new Error('Account cleanup status is invalid')
 
   return {
@@ -77,6 +79,7 @@ function parseStatus(value: unknown): AccountAdminStatus {
       userId: text(other.userId, 'Other member id'),
       email: nullableText(other.email, 'Other member email'),
     } : null,
+    replacementAvailable: row.replacementAvailable,
     pendingReplacement: pending ? {
       actionId: text(pending.actionId, 'Replacement action id'),
       replacementUserId: nullableText(pending.replacementUserId, 'Replacement user id'),
