@@ -25,8 +25,10 @@ export function createPairInviteHandler(dependencies: PairInviteHandlerDependenc
     if (!requestOriginAllowed(request)) return jsonResponse(request, { error: 'Origin não permitida.' }, 403)
 
     try {
-      const creatorUserId = await getUserId(request)
+      // Bound and parse untrusted input before spending an authenticated-user
+      // lookup or constructing the service-role client used by invite mutations.
       const body = await readJsonObject(request)
+      const creatorUserId = await getUserId(request)
       const admin = getClient()
 
       const result = await runPairInvite(body, creatorUserId, {
