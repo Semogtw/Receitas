@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(13);
 
 select is(
   (select public from storage.buckets where id = 'recipe-media'),
@@ -61,7 +61,9 @@ insert into public.pair_members (pair_id, user_id, activated_at) values
 
 insert into storage.objects (bucket_id, name) values
   ('recipe-media', 'pairs/82000000-0000-4000-8000-000000000001/recipes/83000000-0000-4000-8000-000000000001/84000000-0000-4000-8000-000000000001.webp'),
-  ('recipe-media', 'pairs/82000000-0000-4000-8000-000000000002/recipes/83000000-0000-4000-8000-000000000002/84000000-0000-4000-8000-000000000002.webp');
+  ('recipe-media', 'pairs/82000000-0000-4000-8000-000000000002/recipes/83000000-0000-4000-8000-000000000002/84000000-0000-4000-8000-000000000002.webp'),
+  ('recipe-media', '82000000-0000-4000-8000-000000000001/81000000-0000-4000-8000-000000000001/restore/85000000-0000-4000-8000-000000000001-a.webp'),
+  ('recipe-media', '82000000-0000-4000-8000-000000000002/81000000-0000-4000-8000-000000000002/restore/85000000-0000-4000-8000-000000000002-b.webp');
 
 select set_config(
   'request.jwt.claims',
@@ -86,6 +88,24 @@ select is(
       and name = 'pairs/82000000-0000-4000-8000-000000000002/recipes/83000000-0000-4000-8000-000000000002/84000000-0000-4000-8000-000000000002.webp'),
   0,
   'active member cannot read media from another pair namespace'
+);
+
+select is(
+  (select count(*)::integer
+     from storage.objects
+    where bucket_id = 'recipe-media'
+      and name = '82000000-0000-4000-8000-000000000001/81000000-0000-4000-8000-000000000001/restore/85000000-0000-4000-8000-000000000001-a.webp'),
+  1,
+  'active member can read content-addressed media restored into its own pair'
+);
+
+select is(
+  (select count(*)::integer
+     from storage.objects
+    where bucket_id = 'recipe-media'
+      and name = '82000000-0000-4000-8000-000000000002/81000000-0000-4000-8000-000000000002/restore/85000000-0000-4000-8000-000000000002-b.webp'),
+  0,
+  'active member cannot read restored media from another pair'
 );
 
 select lives_ok(
