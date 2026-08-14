@@ -27,6 +27,11 @@ export const REQUIRED_SECURITY_CONTRACTS = {
     'authenticated must not execute account_admin_remove_other directly',
     'authenticated must not read private recovery target status directly',
   ],
+  'supabase/tests/account_admin_replacement_verification.sql': [
+    'unconfirmed replacement cannot activate membership',
+    'confirmed invited replacement activates membership',
+    'replacement completion keeps the private pair closed',
+  ],
   'supabase/tests/sync_cross_pair_security.sql': [
     'semantic mutation cannot target a pair the authenticated user does not belong to',
     'semantic mutation cannot smuggle another pair id through the payload',
