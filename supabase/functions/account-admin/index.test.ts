@@ -49,9 +49,16 @@ function request(body: Record<string, unknown>, token = recentToken()): Request 
 function fakeAdmin(options: {
   otherUserId?: string | null
   recoverableUserId?: string | null
+  pendingReplacement?: boolean
+  replacementCleanupPending?: boolean
+  deleteUserError?: boolean
+  lookupUserError?: boolean
 } = {}) {
   const rpcCalls: Array<{ name: string; args: Record<string, unknown> }> = []
+  const deleteUserCalls: string[] = []
   let fromCalls = 0
+  let pendingReplacement = options.pendingReplacement ?? false
+  let replacementCleanupPending = options.replacementCleanupPending ?? false
 
   const membershipBuilder = {
     select() { return this },
@@ -72,9 +79,16 @@ function fakeAdmin(options: {
     auth: {
       admin: {
         async getUserById(userId: string) {
+          if (options.lookupUserError) {
+            return { data: { user: null }, error: { message: 'lookup failed' } }
+          }
           return { data: { user: { id: userId, email: `${userId.slice(-4)}@example.com` } }, error: null }
         },
-        async deleteUser() {
+        async deleteUser(userId: string) {
+          deleteUserCalls.push(userId)
+          if (options.deleteUserError) {
+            return { data: {}, error: { message: 'delete failed' } }
+          }
           return { data: {}, error: null }
         },
         async inviteUserByEmail(email: string) {
@@ -92,8 +106,23 @@ function fakeAdmin(options: {
           data: {
             other_user_id: options.otherUserId === undefined ? otherUserId : options.otherUserId,
             recoverable_target_user_id: options.recoverableUserId ?? null,
-            pending_replacement: null,
-            auth_cleanup_actions: [],
+            pending_replacement: pendingReplacement ? {
+              id: actionId,
+              target_user_id: otherUserId,
+              replacement_user_id: replacementUserId,
+              status: 'pending_activation',
+              expires_at: '2099-01-01T00:00:00.000Z',
+              auth_cleanup_pending: false,
+              replacement_auth_cleanup_pending: false,
+            } : null,
+            auth_cleanup_actions: replacementCleanupPending ? [{
+              id: actionId,
+              target_user_id: otherUserId,
+              replacement_user_id: replacementUserId,
+              status: 'cancelled',
+              auth_cleanup_pending: false,
+              replacement_auth_cleanup_pending: true,
+            }] : [],
           },
           error: null,
         }
@@ -101,7 +130,16 @@ function fakeAdmin(options: {
       if (name === 'account_admin_remove_other') return { data: actionId, error: null }
       if (name === 'account_admin_begin_replacement') return { data: actionId, error: null }
       if (name === 'account_admin_mark_auth_cleanup') return { data: null, error: null }
+      if (name === 'account_admin_mark_replacement_auth_cleanup') {
+        replacementCleanupPending = args.p_pending === true
+        return { data: null, error: null }
+      }
       if (name === 'account_admin_complete_replacement') return { data: pairId, error: null }
+      if (name === 'account_admin_cancel_replacement_v2') {
+        pendingReplacement = false
+        replacementCleanupPending = true
+        return { data: replacementUserId, error: null }
+      }
       throw new Error(`Unexpected RPC ${name}`)
     },
   }
@@ -109,6 +147,7 @@ function fakeAdmin(options: {
   return {
     admin: admin as never,
     rpcCalls,
+    deleteUserCalls,
     get fromCalls() { return fromCalls },
   }
 }
@@ -204,4 +243,40 @@ Deno.test('replacement completion does not require an already-active pair member
   assertEquals(body, { pairId })
   assertEquals(fake.fromCalls, 0, 'Pending replacement should not need active membership before completion')
   assert(fake.rpcCalls.some((call) => call.name === 'account_admin_complete_replacement'))
+})
+
+Deno.test('cancel replacement keeps a retryable cleanup flag when provider deletion fails', async () => {
+  const fake = fakeAdmin({ pendingReplacement: true, deleteUserError: true })
+  const response = await handler(fake)(request({ action: 'cancel_replacement' }))
+  const body = await response.json()
+
+  assertEquals(response.status, 200)
+  assertEquals(body, { cancelled: true, authCleanupPending: true })
+  assertEquals(fake.deleteUserCalls, [replacementUserId])
+  assert(fake.rpcCalls.some((call) => call.name === 'account_admin_cancel_replacement_v2'))
+  assert(!fake.rpcCalls.some((call) => call.name === 'account_admin_mark_replacement_auth_cleanup'))
+})
+
+Deno.test('successful cancellation clears replacement cleanup only after database cancellation', async () => {
+  const fake = fakeAdmin({ pendingReplacement: true })
+  const response = await handler(fake)(request({ action: 'cancel_replacement' }))
+  const body = await response.json()
+
+  assertEquals(response.status, 200)
+  assertEquals(body, { cancelled: true, authCleanupPending: false })
+  const cancelIndex = fake.rpcCalls.findIndex((call) => call.name === 'account_admin_cancel_replacement_v2')
+  const cleanIndex = fake.rpcCalls.findIndex((call) => call.name === 'account_admin_mark_replacement_auth_cleanup')
+  assert(cancelIndex >= 0, 'Expected database cancellation RPC')
+  assert(cleanIndex > cancelIndex, 'Replacement cleanup was acknowledged before database cancellation')
+})
+
+Deno.test('retry auth cleanup drains a cancelled replacement identity', async () => {
+  const fake = fakeAdmin({ replacementCleanupPending: true })
+  const response = await handler(fake)(request({ action: 'retry_auth_cleanup' }))
+  const body = await response.json()
+
+  assertEquals(response.status, 200)
+  assertEquals(body, { authCleanupPending: false })
+  assertEquals(fake.deleteUserCalls, [replacementUserId])
+  assert(fake.rpcCalls.some((call) => call.name === 'account_admin_mark_replacement_auth_cleanup'))
 })
