@@ -16,6 +16,7 @@ export interface MediaUploadJob {
   width: number
   height: number
   sizeBytes: number
+  sha256: string
   position: number
   caption: string | null
   createdAt: string
@@ -54,6 +55,7 @@ function parseJob(value: unknown): MediaUploadJob {
     typeof job.width !== 'number' || !Number.isSafeInteger(job.width) || job.width <= 0 ||
     typeof job.height !== 'number' || !Number.isSafeInteger(job.height) || job.height <= 0 ||
     typeof job.sizeBytes !== 'number' || !Number.isSafeInteger(job.sizeBytes) || job.sizeBytes < 0 ||
+    typeof job.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(job.sha256) ||
     typeof job.position !== 'number' || !Number.isSafeInteger(job.position) || job.position < 0 ||
     !(job.caption === null || typeof job.caption === 'string') ||
     typeof job.createdAt !== 'string' || !job.createdAt.trim() ||
