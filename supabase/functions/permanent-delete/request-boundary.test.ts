@@ -76,3 +76,30 @@ Deno.test('permanent delete rejects malformed JSON before privileged client/auth
   assertEquals(clientCalls, 0)
   assertEquals(authCalls, 0)
 })
+
+Deno.test('permanent delete rejects invalid entity identifiers before privileged client/auth work', async () => {
+  let clientCalls = 0
+  let authCalls = 0
+  const handler = createPermanentDeleteHandler({
+    getClient: () => {
+      clientCalls += 1
+      throw new Error('client_must_not_be_created')
+    },
+    getUserId: async () => {
+      authCalls += 1
+      return '10000000-0000-4000-8000-000000000001'
+    },
+  })
+
+  const response = await handler(new Request('https://example.supabase.co/functions/v1/permanent-delete', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ entityType: 'recipes', entityId: 'not-a-uuid' }),
+  }))
+  const body = await response.json()
+
+  assertEquals(response.status, 400)
+  assertEquals(body, { error: 'invalid_entity_id' })
+  assertEquals(clientCalls, 0)
+  assertEquals(authCalls, 0)
+})
