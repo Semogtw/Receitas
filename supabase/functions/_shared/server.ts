@@ -47,6 +47,14 @@ export function getBootstrapSecret(): string {
   return requiredEnv('BOOTSTRAP_SECRET')
 }
 
+function bearerToken(request: Request): string {
+  const authorization = request.headers.get('authorization') ?? ''
+  const match = authorization.match(/^Bearer\s+([^\s].*)$/i)
+  const token = match?.[1]?.trim()
+  if (!token) throw new Error('authentication_required')
+  return token
+}
+
 export async function getRequestUserId(request: Request): Promise<string>
 export async function getRequestUserId(client: SupabaseClient, request: Request): Promise<string>
 export async function getRequestUserId(
@@ -54,12 +62,12 @@ export async function getRequestUserId(
   maybeRequest?: Request,
 ): Promise<string> {
   const request = maybeRequest ?? clientOrRequest as Request
+  // Parse the untrusted Authorization header before constructing a privileged
+  // client. Requests without a usable Bearer token should not touch secrets/env.
+  const token = bearerToken(request)
   const client = maybeRequest ? clientOrRequest as SupabaseClient : getAdminClient()
-  const authorization = request.headers.get('authorization') ?? ''
-  const match = authorization.match(/^Bearer\s+(.+)$/i)
-  if (!match) throw new Error('authentication_required')
 
-  const { data, error } = await client.auth.getUser(match[1])
+  const { data, error } = await client.auth.getUser(token)
   if (error || !data.user) throw new Error('authentication_required')
   return data.user.id
 }
