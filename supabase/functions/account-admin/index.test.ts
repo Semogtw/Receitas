@@ -15,6 +15,7 @@ const actorUserId = '10000000-0000-4000-8000-000000000001'
 const otherUserId = '10000000-0000-4000-8000-000000000002'
 const recoverableUserId = '10000000-0000-4000-8000-000000000003'
 const attackerChosenTarget = '10000000-0000-4000-8000-000000000099'
+const replacementUserId = '10000000-0000-4000-8000-000000000077'
 const pairId = '20000000-0000-4000-8000-000000000002'
 const safetyJobId = '30000000-0000-4000-8000-000000000003'
 const actionId = '40000000-0000-4000-8000-000000000004'
@@ -78,7 +79,7 @@ function fakeAdmin(options: {
         },
         async inviteUserByEmail(email: string) {
           return {
-            data: { user: { id: '10000000-0000-4000-8000-000000000077', email } },
+            data: { user: { id: replacementUserId, email } },
             error: null,
           }
         },
@@ -98,6 +99,7 @@ function fakeAdmin(options: {
         }
       }
       if (name === 'account_admin_remove_other') return { data: actionId, error: null }
+      if (name === 'account_admin_begin_replacement') return { data: actionId, error: null }
       if (name === 'account_admin_mark_auth_cleanup') return { data: null, error: null }
       if (name === 'account_admin_complete_replacement') return { data: pairId, error: null }
       throw new Error(`Unexpected RPC ${name}`)
@@ -168,6 +170,29 @@ Deno.test('remove_other ignores a browser-supplied target and uses only the serv
   assert(destructive, 'Expected account_admin_remove_other RPC')
   assertEquals(destructive.args.p_target_user_id, otherUserId)
   assert(destructive.args.p_target_user_id !== attackerChosenTarget, 'Browser-controlled target reached destructive RPC')
+})
+
+Deno.test('delayed replacement uses only the server-derived recoverable target after access-only removal', async () => {
+  const fake = fakeAdmin({ otherUserId: null, recoverableUserId })
+  const response = await handler(fake)(request({
+    action: 'begin_replacement',
+    safetyJobId,
+    replacementEmail: 'new@example.com',
+    targetUserId: attackerChosenTarget,
+  }))
+  const body = await response.json()
+
+  assertEquals(response.status, 200)
+  assertEquals(body, {
+    pending: true,
+    replacementEmail: 'new@example.com',
+    authCleanupPending: false,
+  })
+  const destructive = fake.rpcCalls.find((call) => call.name === 'account_admin_begin_replacement')
+  assert(destructive, 'Expected account_admin_begin_replacement RPC')
+  assertEquals(destructive.args.p_target_user_id, recoverableUserId)
+  assertEquals(destructive.args.p_replacement_user_id, replacementUserId)
+  assert(destructive.args.p_target_user_id !== attackerChosenTarget, 'Browser-controlled target reached replacement RPC')
 })
 
 Deno.test('replacement completion does not require an already-active pair membership', async () => {
