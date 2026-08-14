@@ -99,4 +99,14 @@ describe('PhotoMetadataPublisher', () => {
     const publisher = new PhotoMetadataPublisher(databaseWith(), scope, writer([]))
     await expect(publisher.publish({ ...recipeJob, pairId: 'other-pair' }, 'path.webp')).rejects.toThrow('pair')
   })
+
+  it('rejects metadata paths that do not match the deterministic upload job namespace', async () => {
+    const envelopes: MutationEnvelope[] = []
+    const publisher = new PhotoMetadataPublisher(databaseWith(), scope, writer(envelopes))
+
+    await expect(
+      publisher.publish(recipeJob, 'pairs/other-pair/recipes/recipe-a/photo-a.webp'),
+    ).rejects.toThrow('storage path')
+    expect(envelopes).toEqual([])
+  })
 })
