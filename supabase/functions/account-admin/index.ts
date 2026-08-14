@@ -3,8 +3,11 @@ import { readJsonObject as readBoundedJsonObject, withCorsAndErrors } from '../_
 import { createServerClient, getAppBaseUrl, getRequestUserId } from '../_shared/server.ts'
 import { assertRecentPasswordAuthentication, bearerToken } from './recent-auth.ts'
 
+const ACCOUNT_ADMIN_BODY_LIMIT_BYTES = 16 * 1024
+
 interface AccountAdminStatusRow {
   other_user_id: string | null
+  recoverable_target_user_id: string | null
   pending_replacement: null | {
     id: string
     target_user_id: string
@@ -21,19 +24,17 @@ interface AccountAdminStatusRow {
   }>
 }
 
+export interface AccountAdminDependencies {
+  createClient?: () => unknown
+  requestUserId?: (client: SupabaseClient, request: Request) => Promise<string>
+  appBaseUrl?: () => string
+}
+
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'content-type': 'application/json; charset=utf-8' },
   })
-}
-
-async function readJsonObject(request: Request): Promise<Record<string, unknown> | null> {
-  try {
-    return await readBoundedJsonObject(request)
-  } catch {
-    return null
-  }
 }
 
 function text(value: unknown, label: string, maxLength = 320): string {
@@ -98,6 +99,9 @@ async function emailForUser(admin: SupabaseClient, userId: string | null): Promi
 async function publicStatus(admin: SupabaseClient, pairId: string, actorUserId: string) {
   const status = await readStatus(admin, pairId, actorUserId)
   const otherUserId = status.other_user_id ? uuid(status.other_user_id, 'account_admin_other_user_id') : null
+  const recoverableTargetUserId = status.recoverable_target_user_id
+    ? uuid(status.recoverable_target_user_id, 'account_admin_recoverable_target_user_id')
+    : null
   const pending = status.pending_replacement
   const replacementUserId = pending?.replacement_user_id
     ? uuid(pending.replacement_user_id, 'account_admin_replacement_user_id')
@@ -110,6 +114,9 @@ async function publicStatus(admin: SupabaseClient, pairId: string, actorUserId: 
 
   return {
     otherMember: otherUserId ? { userId: otherUserId, email: otherEmail } : null,
+    // A removed identity can remain an administrative recovery target. Expose
+    // only the capability bit; the historical target UUID stays server-side.
+    replacementAvailable: Boolean(otherUserId || recoverableTargetUserId),
     pendingReplacement: pending ? {
       actionId: uuid(pending.id, 'account_admin_action_id'),
       replacementUserId,
@@ -152,6 +159,8 @@ async function requireRecentPassword(request: Request, userId: string): Promise<
 function publicError(error: unknown): Response {
   const code = error instanceof Error ? error.message : 'account_admin_failed'
   if (code === 'authentication_required') return json(401, { error: 'authentication_required' })
+  if (code === 'request_body_too_large') return json(413, { error: 'request_body_too_large' })
+  if (code === 'invalid_json_object') return json(400, { error: 'invalid_request' })
   if (code.includes('membership_required')) return json(403, { error: 'pair_membership_required' })
   if (code.includes('recent_password_auth')) return json(409, { error: 'recent_password_auth_required' })
   if (code.includes('replacement_email_invalid') || code.includes('_invalid')) return json(400, { error: 'invalid_account_admin_request' })
@@ -161,114 +170,128 @@ function publicError(error: unknown): Response {
   return json(422, { error: 'account_admin_request_rejected' })
 }
 
-const handler = async (request: Request): Promise<Response> => {
-  if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' })
-  const body = await readJsonObject(request)
-  if (!body) return json(400, { error: 'invalid_request' })
-  const action = typeof body.action === 'string' ? body.action : ''
+export function createAccountAdminHandler(dependencies: AccountAdminDependencies = {}) {
+  const createClient = dependencies.createClient ?? createServerClient
+  const requestUserId = dependencies.requestUserId ?? getRequestUserId
+  const appBaseUrl = dependencies.appBaseUrl ?? getAppBaseUrl
 
-  const admin = createServerClient()
-  const userId = await getRequestUserId(admin, request)
+  return withCorsAndErrors(async (request: Request): Promise<Response> => {
+    if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' })
 
-  try {
-    if (action === 'complete_replacement') {
-      const { data: pairId, error } = await admin.rpc('account_admin_complete_replacement', {
-        p_replacement_user_id: userId,
-      })
-      if (error || !pairId) throw new Error('replacement_completion_failed')
-      return json(200, { pairId })
+    let body: Record<string, unknown>
+    try {
+      body = await readBoundedJsonObject(request, ACCOUNT_ADMIN_BODY_LIMIT_BYTES)
+    } catch (error) {
+      return publicError(error)
     }
+    const action = typeof body.action === 'string' ? body.action : ''
 
-    const pairId = await activePairForUser(admin, userId)
+    const admin = createClient() as SupabaseClient
+    const userId = await requestUserId(admin, request)
 
-    if (action === 'status') {
-      return json(200, { status: await publicStatus(admin, pairId, userId) })
-    }
+    try {
+      if (action === 'complete_replacement') {
+        const { data: pairId, error } = await admin.rpc('account_admin_complete_replacement', {
+          p_replacement_user_id: userId,
+        })
+        if (error || !pairId) throw new Error('replacement_completion_failed')
+        return json(200, { pairId })
+      }
 
-    await requireRecentPassword(request, userId)
-    const status = await readStatus(admin, pairId, userId)
+      const pairId = await activePairForUser(admin, userId)
 
-    if (action === 'remove_other') {
-      if (!status.other_user_id) throw new Error('account_admin_target_missing')
-      const targetUserId = uuid(status.other_user_id, 'account_admin_target_user_id')
-      const safetyJobId = uuid(body.safetyJobId, 'account_admin_safety_job_id')
-      const { data: actionIdRaw, error } = await admin.rpc('account_admin_remove_other', {
-        p_pair_id: pairId,
-        p_actor_user_id: userId,
-        p_target_user_id: targetUserId,
-        p_safety_job_id: safetyJobId,
-      })
-      if (error || !actionIdRaw) throw new Error('account_admin_remove_failed')
-      const actionId = uuid(actionIdRaw, 'account_admin_action_id')
-      const authDeleted = await deleteAuthIdentity(admin, targetUserId, actionId)
-      return json(200, { removed: true, authCleanupPending: !authDeleted })
-    }
+      if (action === 'status') {
+        return json(200, { status: await publicStatus(admin, pairId, userId) })
+      }
 
-    if (action === 'begin_replacement') {
-      if (!status.other_user_id) throw new Error('account_admin_target_missing')
-      if (status.pending_replacement) throw new Error('account_admin_replacement_already_pending')
-      const targetUserId = uuid(status.other_user_id, 'account_admin_target_user_id')
-      const safetyJobId = uuid(body.safetyJobId, 'account_admin_safety_job_id')
-      const replacementEmail = normalizeEmail(body.replacementEmail)
-      const actorEmail = await emailForUser(admin, userId)
-      if (actorEmail && replacementEmail === actorEmail) throw new Error('replacement_email_invalid')
+      // Reject stale authentication before reading administrative status or
+      // invoking any destructive mutation RPC.
+      await requireRecentPassword(request, userId)
+      const status = await readStatus(admin, pairId, userId)
 
-      const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(replacementEmail, {
-        redirectTo: `${getAppBaseUrl()}/auth/finish-replacement`,
-      })
-      if (inviteError || !invited.user) throw new Error('replacement_invite_failed')
-      const replacementUserId = invited.user.id
+      if (action === 'remove_other') {
+        if (!status.other_user_id) throw new Error('account_admin_target_missing')
+        const targetUserId = uuid(status.other_user_id, 'account_admin_target_user_id')
+        const safetyJobId = uuid(body.safetyJobId, 'account_admin_safety_job_id')
+        const { data: actionIdRaw, error } = await admin.rpc('account_admin_remove_other', {
+          p_pair_id: pairId,
+          p_actor_user_id: userId,
+          p_target_user_id: targetUserId,
+          p_safety_job_id: safetyJobId,
+        })
+        if (error || !actionIdRaw) throw new Error('account_admin_remove_failed')
+        const actionId = uuid(actionIdRaw, 'account_admin_action_id')
+        const authDeleted = await deleteAuthIdentity(admin, targetUserId, actionId)
+        return json(200, { removed: true, authCleanupPending: !authDeleted })
+      }
 
-      const { data: actionIdRaw, error } = await admin.rpc('account_admin_begin_replacement', {
-        p_pair_id: pairId,
-        p_actor_user_id: userId,
-        p_target_user_id: targetUserId,
-        p_replacement_user_id: replacementUserId,
-        p_safety_job_id: safetyJobId,
-      })
-      if (error || !actionIdRaw) {
+      if (action === 'begin_replacement') {
+        if (status.pending_replacement) throw new Error('account_admin_replacement_already_pending')
+        const targetUserIdRaw = status.other_user_id ?? status.recoverable_target_user_id
+        if (!targetUserIdRaw) throw new Error('account_admin_target_missing')
+        const targetUserId = uuid(targetUserIdRaw, 'account_admin_target_user_id')
+        const safetyJobId = uuid(body.safetyJobId, 'account_admin_safety_job_id')
+        const replacementEmail = normalizeEmail(body.replacementEmail)
+        const actorEmail = await emailForUser(admin, userId)
+        if (actorEmail && replacementEmail === actorEmail) throw new Error('replacement_email_invalid')
+
+        const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(replacementEmail, {
+          redirectTo: `${appBaseUrl()}/auth/finish-replacement`,
+        })
+        if (inviteError || !invited.user) throw new Error('replacement_invite_failed')
+        const replacementUserId = invited.user.id
+
+        const { data: actionIdRaw, error } = await admin.rpc('account_admin_begin_replacement', {
+          p_pair_id: pairId,
+          p_actor_user_id: userId,
+          p_target_user_id: targetUserId,
+          p_replacement_user_id: replacementUserId,
+          p_safety_job_id: safetyJobId,
+        })
+        if (error || !actionIdRaw) {
+          await admin.auth.admin.deleteUser(replacementUserId, false).catch(() => undefined)
+          throw new Error('account_admin_replacement_begin_failed')
+        }
+
+        const actionId = uuid(actionIdRaw, 'account_admin_action_id')
+        const authDeleted = await deleteAuthIdentity(admin, targetUserId, actionId)
+        return json(200, {
+          pending: true,
+          replacementEmail,
+          authCleanupPending: !authDeleted,
+        })
+      }
+
+      if (action === 'cancel_replacement') {
+        if (!status.pending_replacement) throw new Error('account_admin_replacement_not_pending')
+        const actionId = uuid(status.pending_replacement.id, 'account_admin_action_id')
+        const { data: replacementUserIdRaw, error } = await admin.rpc('account_admin_cancel_replacement_v2', {
+          p_pair_id: pairId,
+          p_actor_user_id: userId,
+          p_action_id: actionId,
+        })
+        if (error || !replacementUserIdRaw) throw new Error('account_admin_replacement_cancel_failed')
+        const replacementUserId = uuid(replacementUserIdRaw, 'account_admin_replacement_user_id')
         await admin.auth.admin.deleteUser(replacementUserId, false).catch(() => undefined)
-        throw new Error('account_admin_replacement_begin_failed')
+        return json(200, { cancelled: true })
       }
 
-      const actionId = uuid(actionIdRaw, 'account_admin_action_id')
-      const authDeleted = await deleteAuthIdentity(admin, targetUserId, actionId)
-      return json(200, {
-        pending: true,
-        replacementEmail,
-        authCleanupPending: !authDeleted,
-      })
-    }
-
-    if (action === 'cancel_replacement') {
-      if (!status.pending_replacement) throw new Error('account_admin_replacement_not_pending')
-      const actionId = uuid(status.pending_replacement.id, 'account_admin_action_id')
-      const { data: replacementUserIdRaw, error } = await admin.rpc('account_admin_cancel_replacement_v2', {
-        p_pair_id: pairId,
-        p_actor_user_id: userId,
-        p_action_id: actionId,
-      })
-      if (error || !replacementUserIdRaw) throw new Error('account_admin_replacement_cancel_failed')
-      const replacementUserId = uuid(replacementUserIdRaw, 'account_admin_replacement_user_id')
-      await admin.auth.admin.deleteUser(replacementUserId, false).catch(() => undefined)
-      return json(200, { cancelled: true })
-    }
-
-    if (action === 'retry_auth_cleanup') {
-      const pending = status.auth_cleanup_actions
-      for (const item of pending) {
-        const actionId = uuid(item.id, 'account_admin_action_id')
-        const targetUserId = uuid(item.target_user_id, 'account_admin_target_user_id')
-        await deleteAuthIdentity(admin, targetUserId, actionId)
+      if (action === 'retry_auth_cleanup') {
+        const pending = status.auth_cleanup_actions
+        for (const item of pending) {
+          const actionId = uuid(item.id, 'account_admin_action_id')
+          const targetUserId = uuid(item.target_user_id, 'account_admin_target_user_id')
+          await deleteAuthIdentity(admin, targetUserId, actionId)
+        }
+        const refreshed = await readStatus(admin, pairId, userId)
+        return json(200, { authCleanupPending: refreshed.auth_cleanup_actions.length > 0 })
       }
-      const refreshed = await readStatus(admin, pairId, userId)
-      return json(200, { authCleanupPending: refreshed.auth_cleanup_actions.length > 0 })
-    }
 
-    return json(400, { error: 'unsupported_action' })
-  } catch (error) {
-    return publicError(error)
-  }
+      return json(400, { error: 'unsupported_action' })
+    } catch (error) {
+      return publicError(error)
+    }
+  })
 }
 
-Deno.serve(withCorsAndErrors(handler))
+if (import.meta.main) Deno.serve(createAccountAdminHandler())
