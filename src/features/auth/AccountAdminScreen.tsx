@@ -177,7 +177,7 @@ export function AccountAdminScreen({
   }
 
   async function beginReplacement() {
-    if (!safety || !status?.otherMember) return
+    if (!safety || !status?.replacementAvailable || status.pendingReplacement) return
     const currentPassword = password
     setPassword('')
     setWorking(true)
@@ -250,7 +250,7 @@ export function AccountAdminScreen({
   }
 
   const pending = status?.pendingReplacement ?? null
-  const canPrepareSafety = Boolean(status?.otherMember) && !pending
+  const canPrepareSafety = Boolean(status?.replacementAvailable) && !pending
 
   return (
     <section className="account-admin" aria-labelledby="account-admin-title">
@@ -267,6 +267,9 @@ export function AccountAdminScreen({
 
           <div className="account-admin__status">
             <span>Outra identidade: <strong>{otherMemberLabel(status)}</strong></span>
+            {!status?.otherMember && status?.replacementAvailable && !pending ? (
+              <span><strong>Vaga disponível apenas para recuperação administrativa.</strong></span>
+            ) : null}
             {pending ? (
               <span>
                 Substituição pendente: <strong>{pending.replacementEmail ?? 'identidade convidada'}</strong>
@@ -316,11 +319,15 @@ export function AccountAdminScreen({
             </label>
           ) : null}
 
-          {safety && status?.otherMember && !pending ? (
+          {safety && status?.replacementAvailable && !pending ? (
             <div className="account-admin__actions">
               <div className="account-admin__step">
-                <strong>2A. Substituir a outra identidade</strong>
-                <p>Revoga a identidade atual da outra pessoa e reserva a segunda vaga para um novo convite privado de recuperação.</p>
+                <strong>{status.otherMember ? '2A. Substituir a outra identidade' : '2. Recuperar a segunda identidade'}</strong>
+                <p>
+                  {status.otherMember
+                    ? 'Revoga a identidade ativa da outra pessoa e reserva a segunda vaga para um novo convite privado de recuperação.'
+                    : 'Usa a vaga administrativa preservada para enviar um novo convite privado, sem reabrir o cadastro normal do par.'}
+                </p>
                 <label className="field-stack">
                   Novo e-mail
                   <input
@@ -341,18 +348,20 @@ export function AccountAdminScreen({
                 </button>
               </div>
 
-              <div className="account-admin__step">
-                <strong>2B. Somente remover o acesso antigo</strong>
-                <p>Revoga a outra identidade sem ocupar a vaga com uma substituta. O par continua fechado; uma recuperação futura exige novo safety backup.</p>
-                <button
-                  type="button"
-                  className="button button--danger"
-                  disabled={working || !password}
-                  onClick={() => void removeOther()}
-                >
-                  Remover somente o acesso antigo
-                </button>
-              </div>
+              {status.otherMember ? (
+                <div className="account-admin__step">
+                  <strong>2B. Somente remover o acesso antigo</strong>
+                  <p>Revoga a outra identidade sem ocupar a vaga com uma substituta. O par continua fechado; uma recuperação futura exige novo safety backup.</p>
+                  <button
+                    type="button"
+                    className="button button--danger"
+                    disabled={working || !password}
+                    onClick={() => void removeOther()}
+                  >
+                    Remover somente o acesso antigo
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
