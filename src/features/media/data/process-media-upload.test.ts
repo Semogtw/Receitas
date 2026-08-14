@@ -13,6 +13,7 @@ const job: MediaUploadJob = {
   width: 1600,
   height: 1200,
   sizeBytes: 5,
+  sha256: 'a'.repeat(64),
   position: 0,
   caption: null,
   createdAt: '2026-08-07T20:00:00.000Z',
@@ -56,6 +57,7 @@ describe('processNextMediaUpload', () => {
       job,
       'pairs/pair-a/recipes/recipe-a/photo-a.webp',
     )
+    expect(metadata.publish.mock.calls[0]?.[0].sha256).toBe('a'.repeat(64))
     expect(storage.upload.mock.invocationCallOrder[0]).toBeLessThan(metadata.publish.mock.invocationCallOrder[0]!)
     expect(queue.remove).toHaveBeenCalledWith('photo-a')
   })
