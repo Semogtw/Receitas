@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { readdir } from 'node:fs/promises'
 import path from 'node:path'
@@ -27,6 +28,25 @@ async function collectTypeScriptFiles(directory) {
   return files
 }
 
+function runDeno(args, label) {
+  console.log(`\n[Deno gate] ${label}`)
+  const result = spawnSync('deno', args, {
+    cwd: process.cwd(),
+    stdio: 'inherit',
+    shell: false,
+  })
+
+  if (result.error) {
+    console.error(`Unable to start Deno for ${label}:`, result.error.message)
+    process.exit(1)
+  }
+  if (result.status !== 0) {
+    console.error(`[Deno gate] FAILED: ${label}`)
+    process.exit(result.status ?? 1)
+  }
+  console.log(`[Deno gate] PASS: ${label}`)
+}
+
 const allFiles = (await collectTypeScriptFiles(root))
   .map((file) => path.relative(process.cwd(), file))
   .sort((left, right) => left.localeCompare(right))
@@ -40,18 +60,23 @@ if (files.length === 0) {
   process.exit(1)
 }
 
+const manifest = files.join('\n')
+const manifestSha256 = createHash('sha256').update(manifest).digest('hex')
 console.log(`Deno ${mode} gate: ${files.length} file(s) discovered explicitly.`)
+console.log(`Deno ${mode} manifest sha256: ${manifestSha256}`)
 for (const file of files) console.log(`  - ${file}`)
 
-const result = spawnSync('deno', [mode, ...files], {
-  cwd: process.cwd(),
-  stdio: 'inherit',
-  shell: false,
-})
-
-if (result.error) {
-  console.error(`Unable to start Deno ${mode}:`, result.error.message)
-  process.exit(1)
+if (mode === 'test') {
+  for (const file of files) {
+    // Typecheck the exact test module first so missing/renamed exports cannot be
+    // masked by test discovery behavior, then execute that same module alone.
+    runDeno(['check', file], `check test module ${file}`)
+    runDeno(['test', file], `execute test module ${file}`)
+  }
+} else {
+  for (const file of files) {
+    runDeno(['check', file], `check module ${file}`)
+  }
 }
 
-process.exit(result.status ?? 1)
+console.log(`\nDeno ${mode} gate completed: ${files.length}/${files.length} file(s) passed.`)
