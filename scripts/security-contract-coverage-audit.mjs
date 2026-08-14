@@ -10,6 +10,8 @@ export const REQUIRED_SECURITY_CONTRACTS = {
   'supabase/tests/storage_rls.sql': [
     'active member cannot read media from another pair namespace',
     'active member cannot upload media into another pair namespace',
+    'active member can read content-addressed media restored into its own pair',
+    'active member cannot read restored media from another pair',
   ],
   'supabase/tests/identity_rls.sql': [
     'second bootstrap attempt is rejected',
