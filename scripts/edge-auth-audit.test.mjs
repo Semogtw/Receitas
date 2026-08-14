@@ -27,9 +27,37 @@ test('does not accept auth calls that exist only in comments or strings', () => 
     // await getRequestUserId(request)
     const note = 'getRequestUserId(request)'
     const body = await readJsonObject(request)
-  `, 'import-url', 'supabase/functions/import-url/index.ts')
+  `, 'pair-invite', 'supabase/functions/pair-invite/index.ts')
 
   assert.equal(findings.length, 1)
+  assert(findings[0].includes('getRequestUserId()'))
+})
+
+test('requires URL import service-role lookup to prove membership is current and activated', () => {
+  const secure = `
+    const userId = await getRequestUserId(admin, request)
+    const membership = await admin.from('pair_members')
+      .select('pair_id')
+      .eq('user_id', userId)
+      .is('removed_at', null)
+      .not('activated_at', 'is', null)
+      .maybeSingle()
+  `
+  assert.deepEqual(
+    inspectEdgeAuthSource(secure, 'import-url', 'supabase/functions/import-url/index.ts'),
+    [],
+  )
+
+  const findings = inspectEdgeAuthSource(`
+    const userId = await getRequestUserId(admin, request)
+    const membership = await admin.from('pair_members')
+      .select('pair_id')
+      .eq('user_id', userId)
+      .maybeSingle()
+  `, 'import-url', 'supabase/functions/import-url/index.ts')
+
+  assert(findings.some((finding) => finding.includes('exclude removed')))
+  assert(findings.some((finding) => finding.includes('require activated')))
 })
 
 test('keeps bootstrap as the only explicit public-by-secret Edge entrypoint', () => {
