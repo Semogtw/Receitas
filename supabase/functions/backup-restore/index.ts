@@ -148,4 +148,8 @@ const handler = async (request: Request): Promise<Response> => {
   }
 }
 
-Deno.serve(withCorsAndErrors(handler))
+export function createBackupRestoreHandler() {
+  return withCorsAndErrors(handler)
+}
+
+if (import.meta.main) Deno.serve(createBackupRestoreHandler())
